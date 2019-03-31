@@ -10,6 +10,8 @@
 #include <SSD1306.h>
 #include "soc/efuse_reg.h"
 
+#include "sds011.h"
+
 #define LEDPIN 2
 
 #define OLED_I2C_ADDR 0x3C
@@ -155,6 +157,9 @@ void setup() {
 
    display.drawString (0, 0, "Init!");
    display.display ();
+
+    // SDS011
+    SdsInit();
 
     // LMIC init
     os_init();
