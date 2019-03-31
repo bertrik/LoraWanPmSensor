@@ -1,0 +1,19 @@
+language: python
+python:
+    - "2.7"
+
+sudo: false
+cache:
+    directories:
+        - "~/.platformio"
+
+before_install:
+    - cd skipreceiver
+
+install:
+    - pip install -U platformio
+    - platformio update
+
+script:
+    - platformio run
+
