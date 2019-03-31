@@ -7,9 +7,6 @@ cache:
     directories:
         - "~/.platformio"
 
-before_install:
-    - cd skipreceiver
-
 install:
     - pip install -U platformio
     - platformio update
