@@ -266,12 +266,13 @@ static void send_dust(sds_meas_t * meas)
         buf[idx++] = 0;
         buf[idx++] = 1;
 
-        buf[idx++] = 0xFF;
-        buf[idx++] = 0xFF;
-        buf[idx++] = 0xFF;
-        buf[idx++] = 0xFF;
-        buf[idx++] = 0xFF;
-        buf[idx++] = 0xFF;
+        uint64_t chipid = ESP.getEfuseMac();
+        buf[idx++] = (chipid >> 48) & 0xFF;
+        buf[idx++] = (chipid >> 32) & 0xFF;
+        buf[idx++] = (chipid >> 24) & 0xFF;
+        buf[idx++] = (chipid >> 16) & 0xFF;
+        buf[idx++] = (chipid >> 8) & 0xFF;
+        buf[idx++] = (chipid >> 0) & 0xFF;
 
         int pm10 = 10.0 * meas->pm10;
         buf[idx++] = (pm10 >> 8) & 0xFF;
@@ -285,7 +286,6 @@ static void send_dust(sds_meas_t * meas)
 
         buf[idx++] = 0xFF;
         buf[idx++] = 0xFF;
-
 
         // Prepare upstream data transmission at the next possible time.
         LMIC_setTxData2(1, buf, idx, 0);
