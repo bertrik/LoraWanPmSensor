@@ -19,7 +19,6 @@ typedef enum {
 
 typedef struct {
     EState  state;
-    uint8_t cmd;
     uint8_t buf[32];
     int     size;
     int     idx, len;
@@ -44,7 +43,7 @@ void SdsInit(void)
     @param[in] b the byte
     @return true if a full message was received
  */
-bool SdsProcess(uint8_t b)
+bool SdsProcess(uint8_t b, uint8_t cmd_id)
 {
     switch (state.state) {
     // wait for header byte
@@ -55,11 +54,14 @@ bool SdsProcess(uint8_t b)
         break;
     // receive COMMAND byte
     case COMMAND:
-        state.sum = 0;
-        state.cmd = b;
-        state.idx = 0;
-        state.len = 6;
-        state.state = DATA;
+        if (b == cmd_id) {
+            state.sum = 0;
+            state.idx = 0;
+            state.len = 6;
+            state.state = DATA;
+        } else {
+            state.state = HEAD;
+        }
         break;
     // store data
     case DATA:
@@ -77,7 +79,7 @@ bool SdsProcess(uint8_t b)
             state.state = TAIL;
         } else {
             state.state = HEAD;
-            SdsProcess(b);
+            SdsProcess(b, cmd_id);
         }
         break;
     // wait for tail byte
@@ -152,5 +154,11 @@ int SdsCreateCmd(uint8_t *buf, int size, const uint8_t *cmd_data, int cmd_data_l
     buf[17] = sum;
     buf[18] = MAGIC2;
     return 19;
+}
+
+int SdsGetBuffer(uint8_t *rsp)
+{
+    memcpy(rsp, &state.buf, 10);
+    return 10;
 }
 

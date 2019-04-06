@@ -3,6 +3,9 @@
 // Based on examples from https://github.com/matthijskooijman/arduino-lmic
 // Copyright (c) 2015 Thomas Telkamp and Matthijs Kooijman
 
+#include <stdio.h>
+#include <stdint.h>
+
 #include <Arduino.h>
 #include "lmic.h"
 #include <hal/hal.h>
@@ -21,7 +24,7 @@
 #define OLED_SCL 15
 
 #define PIN_RX  34
-#define PIN_TX  35
+#define PIN_TX  25
 
 unsigned int counter = 0;
 
@@ -156,7 +159,56 @@ void printESPRevision()
 
 }
 
-void setup()
+static void dump(uint8_t * buf, int len)
+{
+    int i;
+    char hex[8];
+    for (i = 0; i < len; i++) {
+        sprintf(hex, " %02X", buf[i]);
+        Serial.print(hex);
+    }
+    Serial.println();
+}
+
+static int sds_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp,
+                        int timeout)
+{
+    uint8_t data[19];
+    int rsp_len;
+
+    // send cmd
+    int len = SdsCreateCmd(data, sizeof(data), cmd, cmd_len);
+    sds011.write(data, len);
+    dump(data, len);
+
+    // wait for response
+    unsigned long start = millis();
+    while ((millis() - start) < timeout) {
+        if (sds011.available()) {
+            char c = sds011.read();
+            if (SdsProcess(c, 0xC5)) {
+                rsp_len = SdsGetBuffer(rsp);
+                return rsp_len;
+            }
+        }
+    }
+    return 0;
+}
+
+static bool sds_version(void)
+{
+    uint8_t cmd = 7;
+    uint8_t rsp[10];
+    int rsp_len;
+    rsp_len = sds_exchange(&cmd, 1, rsp, 1000);
+    if (rsp_len > 0) {
+        dump(rsp, rsp_len);
+    }
+
+    return (rsp_len > 0);
+}
+
+void setup(void)
 {
     Serial.begin(115200);
     Serial.println(F("Starting..."));
@@ -228,6 +280,9 @@ void setup()
 
     // Start job
     do_send(&sendjob);
+
+    sds_version();
+    sds_version();
 }
 
 void loop()
@@ -238,7 +293,7 @@ void loop()
     while (sds011.available()) {
         Serial.print(".");
         uint8_t c = sds011.read();
-        if (SdsProcess(c)) {
+        if (SdsProcess(c, 0xC0)) {
             // parse it
             SdsParse(&sds_meas);
             Serial.println("Got data");
