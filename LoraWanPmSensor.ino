@@ -59,8 +59,6 @@ void os_getDevKey(u1_t * buf)
 {
 }
 
-static osjob_t sendjob;
-
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).
 const unsigned TX_INTERVAL = 10;
@@ -74,33 +72,11 @@ const lmic_pinmap lmic_pins = {
     .dio = { 26, 33, 32 }       // Pins for the Heltec ESP32 Lora board/ TTGO Lora32 with 3D metal antenna
 };
 
-void do_send(osjob_t * j)
-{
-    // Payload to send (uplink)
-    static uint8_t message[] = "Hello World!";
-
-    // Check if there is not a current TX/RX job running
-    if (LMIC.opmode & OP_TXRXPEND) {
-        Serial.println(F("OP_TXRXPEND, not sending"));
-    } else {
-        // Prepare upstream data transmission at the next possible time.
-        LMIC_setTxData2(1, message, sizeof(message) - 1, 0);
-        Serial.println(F("Sending uplink packet..."));
-        digitalWrite(LEDPIN, HIGH);
-        display.clear();
-        display.drawString(0, 0, "Sending uplink packet...");
-        display.drawString(0, 50, String(++counter));
-        display.display();
-    }
-    // Next TX is scheduled after TX_COMPLETE event.
-}
-
 void onEvent(ev_t ev)
 {
     if (ev == EV_TXCOMPLETE) {
         display.clear();
         display.drawString(0, 0, "EV_TXCOMPLETE event!");
-
 
         Serial.println(F
                        ("EV_TXCOMPLETE (includes waiting for RX windows)"));
@@ -122,10 +98,6 @@ void onEvent(ev_t ev)
             TTN_response[i] = 0;
             display.drawString(0, 32, String(TTN_response));
         }
-        // Schedule next transmission
-        os_setTimedCallback(&sendjob,
-                            os_getTime() + sec2osticks(TX_INTERVAL),
-                            do_send);
         digitalWrite(LEDPIN, LOW);
         display.drawString(0, 50, String(counter));
         display.display();
@@ -278,16 +250,59 @@ void setup(void)
     //LMIC_setDrTxpow(DR_SF11,14);
     LMIC_setDrTxpow(DR_SF9, 14);
 
-    // Start job
-    do_send(&sendjob);
+    sds_version();
+    sds_version();
+}
 
-    sds_version();
-    sds_version();
+static void send_dust(sds_meas_t * meas)
+{
+    uint8_t buf[20];
+
+    if (LMIC.opmode & OP_TXRXPEND) {
+        Serial.println(F("OP_TXRXPEND, not sending"));
+    } else {
+        // encode it
+        int idx = 0;
+        buf[idx++] = 0;
+        buf[idx++] = 1;
+
+        buf[idx++] = 0xFF;
+        buf[idx++] = 0xFF;
+        buf[idx++] = 0xFF;
+        buf[idx++] = 0xFF;
+        buf[idx++] = 0xFF;
+        buf[idx++] = 0xFF;
+
+        int pm10 = 10.0 * meas->pm10;
+        buf[idx++] = (pm10 >> 8) & 0xFF;
+        buf[idx++] = (pm10 >> 0) & 0xFF;
+        int pm2_5 = 10.0 * meas->pm2_5;
+        buf[idx++] = (pm2_5 >> 8) & 0xFF;
+        buf[idx++] = (pm2_5 >> 0) & 0xFF;
+
+        buf[idx++] = 0xFF;
+        buf[idx++] = 0xFF;
+
+        buf[idx++] = 0xFF;
+        buf[idx++] = 0xFF;
+
+
+        // Prepare upstream data transmission at the next possible time.
+        LMIC_setTxData2(1, buf, idx, 0);
+        Serial.println(F("Sending uplink packet..."));
+        digitalWrite(LEDPIN, HIGH);
+        display.clear();
+        display.drawString(0, 0, "Sending uplink packet...");
+        display.drawString(0, 50, String(++counter));
+        display.display();
+    }
 }
 
 void loop()
 {
     static sds_meas_t sds_meas;
+    static unsigned long last_sent = 0;
+    static bool have_data = false;
 
     // check for incoming measurement data
     while (sds011.available()) {
@@ -297,9 +312,20 @@ void loop()
             // parse it
             SdsParse(&sds_meas);
             Serial.println("Got data");
+            have_data = true;
         }
     }
 
+    // time to send a dust measurement?
+    unsigned long now = millis() / 1000;
+    if ((now - last_sent) > 10) {
+        last_sent = now;
+        if (have_data) {
+            Serial.println("Sending dust");
+            send_dust(&sds_meas);
+            have_data = false;
+        }
+    }
     // ?
     os_runloop_once();
 }
