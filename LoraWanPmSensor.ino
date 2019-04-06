@@ -306,13 +306,12 @@ void loop()
 
     // check for incoming measurement data
     while (sds011.available()) {
-        Serial.print(".");
         uint8_t c = sds011.read();
         if (SdsProcess(c, 0xC0)) {
             // parse it
             SdsParse(&sds_meas);
-            Serial.println("Got data");
             have_data = true;
+            Serial.print(".");
         }
     }
 
