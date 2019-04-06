@@ -9,6 +9,7 @@
 #include <SPI.h>
 #include <SSD1306.h>
 #include "soc/efuse_reg.h"
+#include "SoftwareSerial.h"
 
 #include "sds011.h"
 
@@ -19,9 +20,13 @@
 #define OLED_SDA 4
 #define OLED_SCL 15
 
+#define PIN_RX  34
+#define PIN_TX  35
+
 unsigned int counter = 0;
 
-SSD1306 display(OLED_I2C_ADDR, OLED_SDA, OLED_SCL);
+static SSD1306 display(OLED_I2C_ADDR, OLED_SDA, OLED_SCL);
+static SoftwareSerial sds011(PIN_RX, PIN_TX);
 
 /*************************************
  * TODO: Change the following keys
@@ -152,7 +157,6 @@ void printESPRevision()
 void setup()
 {
 	Serial.begin(115200);
-	delay(1500);				// Give time for the seral monitor to start up
 	Serial.println(F("Starting..."));
 
 	printESPRevision();
@@ -175,8 +179,9 @@ void setup()
 	display.drawString(0, 0, "Init!");
 	display.display();
 
-	// SDS011
-	SdsInit();
+    // initialize the SDS011
+    sds011.begin(9600);
+    SdsInit();
 
 	// LMIC init
 	os_init();
@@ -225,5 +230,21 @@ void setup()
 
 void loop()
 {
+    static sds_meas_t sds_meas;
+
+    // check for incoming measurement data
+    while (sds011.available()) {
+        Serial.print(".");
+        uint8_t c = sds011.read();
+        if (SdsProcess(c)) {
+            // parse it
+            SdsParse(&sds_meas);
+            Serial.println("Got data");
+        }
+    }
+
+    // ?
 	os_runloop_once();
 }
+
+
