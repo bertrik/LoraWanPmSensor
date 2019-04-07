@@ -317,7 +317,7 @@ void loop()
 
     // time to send a dust measurement?
     unsigned long now = millis() / 1000;
-    if ((now - last_sent) > 10) {
+    if ((now - last_sent) > TX_INTERVAL) {
         last_sent = now;
         if (have_data) {
             Serial.println("Sending dust");
