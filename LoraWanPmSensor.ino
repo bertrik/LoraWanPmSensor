@@ -171,27 +171,6 @@ int getChipRevision()
             && EFUSE_RD_CHIP_VER_REV1_V);
 }
 
-void printESPRevision()
-{
-    Serial.print("REG_READ(EFUSE_BLK0_RDATA3_REG): ");
-    Serial.println(REG_READ(EFUSE_BLK0_RDATA3_REG), BIN);
-
-    Serial.print("EFUSE_RD_CHIP_VER_REV1_S: ");
-    Serial.println(EFUSE_RD_CHIP_VER_REV1_S, BIN);
-
-    Serial.print("EFUSE_RD_CHIP_VER_REV1_V: ");
-    Serial.println(EFUSE_RD_CHIP_VER_REV1_V, BIN);
-
-    Serial.println();
-
-    Serial.print("Chip Revision (official version): ");
-    Serial.println(getChipRevision());
-
-    Serial.print("Chip Revision from shift Operation ");
-    Serial.println(REG_READ(EFUSE_BLK0_RDATA3_REG) >> 15, BIN);
-
-}
-
 static void dump(uint8_t * buf, int len)
 {
     int i;
@@ -245,8 +224,6 @@ void setup(void)
 {
     Serial.begin(115200);
     Serial.println(F("Starting..."));
-
-    printESPRevision();
 
     // Use the Blue pin to signal transmission.
     pinMode(LEDPIN, OUTPUT);
