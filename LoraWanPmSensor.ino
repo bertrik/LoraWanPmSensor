@@ -32,11 +32,12 @@ static SSD1306 display(OLED_I2C_ADDR, OLED_SDA, OLED_SCL);
 static SoftwareSerial sds011(PIN_RX, PIN_TX);
 
 // This should also be in little endian format, see above.
-static const u1_t PROGMEM DEVEUI[8] =
+static u1_t PROGMEM DEVEUI[8] =
     { 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 void os_getDevEui(u1_t * buf)
 {
-    memcpy_P(buf, DEVEUI, 8);
+    uint64_t chipid = ESP.getEfuseMac();
+    memcpy_P(buf, &chipid, 8);
 }
 
 // This EUI must be in little-endian format, so least-significant-byte
@@ -252,11 +253,11 @@ void setup(void)
 
     // Reset the MAC state. Session and pending data transfers will be discarded.
     LMIC_reset();
-
-    sds_version();
-    sds_version();
-
+    LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
     LMIC_startJoining();
+
+    sds_version();
+    sds_version();
 }
 
 static void send_dust(sds_meas_t * meas)
