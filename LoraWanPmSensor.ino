@@ -26,14 +26,12 @@
 #define PIN_RX  34
 #define PIN_TX  25
 
-unsigned int counter = 0;
+static unsigned int counter = 0;
 
 static SSD1306 display(OLED_I2C_ADDR, OLED_SDA, OLED_SCL);
 static SoftwareSerial sds011(PIN_RX, PIN_TX);
 
 // This should also be in little endian format, see above.
-static u1_t PROGMEM DEVEUI[8] =
-    { 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 void os_getDevEui(u1_t * buf)
 {
     uint64_t chipid = ESP.getEfuseMac();
@@ -56,7 +54,9 @@ void os_getArtEui(u1_t * buf)
 // practice, a key taken from ttnctl can be copied as-is.
 static const u1_t PROGMEM APPKEY[16] =
     { 0xAA, 0x9F, 0x12, 0x45, 0x7F, 0x06, 0x64, 0xDF, 0x4C, 0x1E, 0x9F,
-0xC9, 0x5E, 0xDA, 0x1A, 0x8A };
+    0xC9, 0x5E, 0xDA, 0x1A, 0x8A
+};
+
 void os_getDevKey(u1_t * buf)
 {
     memcpy_P(buf, APPKEY, 16);
@@ -130,8 +130,8 @@ void onEvent(ev_t ev)
         Serial.println(F("EV_REJOIN_FAILED"));
         break;
     case EV_TXCOMPLETE:
-        Serial.
-            println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
+        Serial.println(F
+                       ("EV_TXCOMPLETE (includes waiting for RX windows)"));
         if (LMIC.txrxFlags & TXRX_ACK)
             Serial.println(F("Received ack"));
         if (LMIC.dataLen) {
@@ -164,12 +164,6 @@ void onEvent(ev_t ev)
         Serial.println((unsigned) ev);
         break;
     }
-}
-
-int getChipRevision()
-{
-    return (REG_READ(EFUSE_BLK0_RDATA3_REG) >> (EFUSE_RD_CHIP_VER_REV1_S)
-            && EFUSE_RD_CHIP_VER_REV1_V);
 }
 
 static void dump(uint8_t * buf, int len)
@@ -272,14 +266,6 @@ static void send_dust(sds_meas_t * meas)
         buf[idx++] = 0;
         buf[idx++] = 1;
 
-        uint64_t chipid = ESP.getEfuseMac();
-        buf[idx++] = (chipid >> 48) & 0xFF;
-        buf[idx++] = (chipid >> 32) & 0xFF;
-        buf[idx++] = (chipid >> 24) & 0xFF;
-        buf[idx++] = (chipid >> 16) & 0xFF;
-        buf[idx++] = (chipid >> 8) & 0xFF;
-        buf[idx++] = (chipid >> 0) & 0xFF;
-
         int pm10 = 10.0 * meas->pm10;
         buf[idx++] = (pm10 >> 8) & 0xFF;
         buf[idx++] = (pm10 >> 0) & 0xFF;
@@ -304,7 +290,7 @@ static void send_dust(sds_meas_t * meas)
     }
 }
 
-void loop()
+void loop(void)
 {
     static sds_meas_t sds_meas;
     static unsigned long last_sent = 0;
@@ -316,8 +302,8 @@ void loop()
         if (SdsProcess(c, 0xC0)) {
             // parse it
             SdsParse(&sds_meas);
-//            have_data = true;
-//            Serial.print(".");
+            have_data = true;
+            Serial.print(".");
         }
     }
 
