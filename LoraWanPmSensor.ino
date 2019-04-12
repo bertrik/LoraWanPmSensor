@@ -127,19 +127,13 @@ void onEvent(ev_t ev)
         break;
     case EV_JOINED:
         Serial.println(F("EV_JOINED"));
-        {
-            LMIC_getSessionKeys(&otaa_data.netid, &otaa_data.devaddr, otaa_data.nwkKey,
-                                otaa_data.artKey);
-            otaa_data.magic = OTAA_MAGIC;
-            EEPROM.put(0, otaa_data);
-            EEPROM.commit();
+        LMIC_getSessionKeys(&otaa_data.netid, &otaa_data.devaddr, otaa_data.nwkKey,
+                            otaa_data.artKey);
+        otaa_data.magic = OTAA_MAGIC;
+        EEPROM.put(0, otaa_data);
+        EEPROM.commit();
 
-            print_keys();
-        }
-        // Disable link check validation (automatically enabled
-        // during join, but because slow data rates change max TX
-        // size, we don't use it in this example.
-        LMIC_setLinkCheckMode(0);
+        print_keys();
         break;
     case EV_JOIN_FAILED:
         Serial.println(F("EV_JOIN_FAILED"));
