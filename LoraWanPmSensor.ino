@@ -17,8 +17,6 @@
 
 #include "sds011.h"
 
-#define LEDPIN 2
-
 #define OLED_I2C_ADDR 0x3C
 #define OLED_RESET 16
 #define OLED_SDA 4
@@ -233,9 +231,6 @@ void setup(void)
     Serial.begin(115200);
     Serial.println(F("Starting..."));
 
-    // Use the Blue pin to signal transmission.
-    pinMode(LEDPIN, OUTPUT);
-
     // reset the OLED
     pinMode(OLED_RESET, OUTPUT);
     digitalWrite(OLED_RESET, LOW);
@@ -308,7 +303,6 @@ static void send_dust(sds_meas_t * meas)
         // Prepare upstream data transmission at the next possible time.
         LMIC_setTxData2(1, buf, idx, 0);
         Serial.println(F("Sending uplink packet..."));
-        digitalWrite(LEDPIN, HIGH);
         display.clear();
         display.drawString(0, 0, "Sending uplink packet...");
         display.drawString(0, 50, String(++counter));
