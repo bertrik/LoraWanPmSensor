@@ -13,6 +13,7 @@
 #include <SSD1306.h>
 #include "soc/efuse_reg.h"
 #include "SoftwareSerial.h"
+#include "EEPROM.h"
 
 #include "sds011.h"
 
@@ -26,6 +27,17 @@
 #define PIN_RX  34
 #define PIN_TX  25
 
+#define OTAA_MAGIC 0xCAFEBABE
+
+typedef struct {
+    u4_t netid = 0;
+    devaddr_t devaddr = 0;
+    u1_t nwkKey[16];
+    u1_t artKey[16];
+    uint32_t magic;
+} otaa_data_t;
+
+static otaa_data_t otaa_data;
 static unsigned int counter = 0;
 static uint64_t chipid;
 static SSD1306 display(OLED_I2C_ADDR, OLED_SDA, OLED_SCL);
@@ -42,8 +54,8 @@ void os_getDevEui(u1_t * buf)
 // first. When copying an EUI from ttnctl output, this means to reverse
 // the bytes. For TTN issued EUIs the last bytes should be 0xD5, 0xB3,
 // 0x70.
-static const u1_t PROGMEM APPEUI[8] =
-    { 0x9B, 0xA0, 0x01, 0xD0, 0x7E, 0xD5, 0xB3, 0x70 };
+static const u1_t PROGMEM APPEUI[8] = { 0x9B, 0xA0, 0x01, 0xD0, 0x7E, 0xD5, 0xB3, 0x70 };
+
 void os_getArtEui(u1_t * buf)
 {
     memcpy_P(buf, APPEUI, 8);
@@ -75,6 +87,24 @@ const lmic_pinmap lmic_pins = {
     .dio = { 26, 33, 32 }       // Pins for the Heltec ESP32 Lora board/ TTGO Lora32 with 3D metal antenna
 };
 
+static void print_keys(void)
+{
+    Serial.print("netid: ");
+    Serial.println(otaa_data.netid, DEC);
+    Serial.print("devaddr: ");
+    Serial.println(otaa_data.devaddr, HEX);
+    Serial.print("artKey: ");
+    for (int i = 0; i < sizeof(otaa_data.artKey); ++i) {
+        Serial.print(otaa_data.artKey[i], HEX);
+    }
+    Serial.println("");
+    Serial.print("nwkKey: ");
+    for (int i = 0; i < sizeof(otaa_data.nwkKey); ++i) {
+        Serial.print(otaa_data.nwkKey[i], HEX);
+    }
+    Serial.println("");
+}
+
 void onEvent(ev_t ev)
 {
     Serial.print(os_getTime());
@@ -98,25 +128,13 @@ void onEvent(ev_t ev)
     case EV_JOINED:
         Serial.println(F("EV_JOINED"));
         {
-            u4_t netid = 0;
-            devaddr_t devaddr = 0;
-            u1_t nwkKey[16];
-            u1_t artKey[16];
-            LMIC_getSessionKeys(&netid, &devaddr, nwkKey, artKey);
-            Serial.print("netid: ");
-            Serial.println(netid, DEC);
-            Serial.print("devaddr: ");
-            Serial.println(devaddr, HEX);
-            Serial.print("artKey: ");
-            for (int i = 0; i < sizeof(artKey); ++i) {
-                Serial.print(artKey[i], HEX);
-            }
-            Serial.println("");
-            Serial.print("nwkKey: ");
-            for (int i = 0; i < sizeof(nwkKey); ++i) {
-                Serial.print(nwkKey[i], HEX);
-            }
-            Serial.println("");
+            LMIC_getSessionKeys(&otaa_data.netid, &otaa_data.devaddr, otaa_data.nwkKey,
+                                otaa_data.artKey);
+            otaa_data.magic = OTAA_MAGIC;
+            EEPROM.put(0, otaa_data);
+            EEPROM.commit();
+
+            print_keys();
         }
         // Disable link check validation (automatically enabled
         // during join, but because slow data rates change max TX
@@ -130,8 +148,7 @@ void onEvent(ev_t ev)
         Serial.println(F("EV_REJOIN_FAILED"));
         break;
     case EV_TXCOMPLETE:
-        Serial.println(F
-                       ("EV_TXCOMPLETE (includes waiting for RX windows)"));
+        Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
         if (LMIC.txrxFlags & TXRX_ACK)
             Serial.println(F("Received ack"));
         if (LMIC.dataLen) {
@@ -177,8 +194,7 @@ static void dump(uint8_t * buf, int len)
     Serial.println();
 }
 
-static int sds_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp,
-                        int timeout)
+static int sds_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int timeout)
 {
     uint8_t data[19];
     int rsp_len;
@@ -244,8 +260,7 @@ void setup(void)
     chipid = ESP.getEfuseMac();
     memcpy(buf, &chipid, sizeof(chipid));
     snprintf(txt, sizeof(txt), "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X",
-             buf[7], buf[6], buf[5], buf[4], buf[3], buf[2], buf[1],
-             buf[0]);
+             buf[7], buf[6], buf[5], buf[4], buf[3], buf[2], buf[1], buf[0]);
     display.drawString(0, 40, txt);
     display.display();
 
@@ -253,13 +268,19 @@ void setup(void)
     sds011.begin(9600);
     SdsInit();
 
+    EEPROM.begin(512);
+    EEPROM.get(0, otaa_data);
+
     // LMIC init
     os_init();
-
-    // Reset the MAC state. Session and pending data transfers will be discarded.
     LMIC_reset();
     LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
-    LMIC_startJoining();
+    if (otaa_data.magic == OTAA_MAGIC) {
+        LMIC_setSession(otaa_data.netid, otaa_data.devaddr, otaa_data.nwkKey, otaa_data.artKey);
+        print_keys();
+    } else {
+        LMIC_startJoining();
+    }
 
     sds_version();
     sds_version();
