@@ -27,14 +27,14 @@
 #define PIN_TX  25
 
 static unsigned int counter = 0;
-
+static uint64_t chipid;
 static SSD1306 display(OLED_I2C_ADDR, OLED_SDA, OLED_SCL);
 static SoftwareSerial sds011(PIN_RX, PIN_TX);
+
 
 // This should also be in little endian format, see above.
 void os_getDevEui(u1_t * buf)
 {
-    uint64_t chipid = ESP.getEfuseMac();
     memcpy_P(buf, &chipid, 8);
 }
 
@@ -217,6 +217,9 @@ static bool sds_version(void)
 
 void setup(void)
 {
+    uint8_t buf[8];
+    char txt[32];
+
     Serial.begin(115200);
     Serial.println(F("Starting..."));
 
@@ -236,6 +239,14 @@ void setup(void)
     display.setTextAlignment(TEXT_ALIGN_LEFT);
 
     display.drawString(0, 0, "Init!");
+    display.display();
+
+    chipid = ESP.getEfuseMac();
+    memcpy(buf, &chipid, sizeof(chipid));
+    snprintf(txt, sizeof(txt), "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X",
+             buf[7], buf[6], buf[5], buf[4], buf[3], buf[2], buf[1],
+             buf[0]);
+    display.drawString(0, 40, txt);
     display.display();
 
     // initialize the SDS011
