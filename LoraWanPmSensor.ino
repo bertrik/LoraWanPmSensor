@@ -170,6 +170,15 @@ void onEvent(ev_t ev)
     case EV_TXSTART:
         Serial.println(F("EV_TXSTART"));
         break;
+    case EV_TXCANCELED:
+        Serial.println(F("EV_TXCANCELED"));
+        break;
+    case EV_RXSTART:
+        Serial.println(F("EV_RXSTART"));
+        break;
+    case EV_JOIN_TXCOMPLETE:
+        Serial.println(F("EV_JOIN_TXCOMPLETE"));
+        break;
     default:
         Serial.print(F("Unknown event: "));
         Serial.println((unsigned) ev);
