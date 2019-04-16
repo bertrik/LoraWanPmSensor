@@ -22,6 +22,8 @@
 #define OLED_SDA 4
 #define OLED_SCL 15
 
+#define PIN_BUTTON 0
+
 #define PIN_RX  34
 #define PIN_TX  25
 
@@ -231,6 +233,9 @@ void setup(void)
     Serial.begin(115200);
     Serial.println(F("Starting..."));
 
+    // button config
+    pinMode(PIN_BUTTON, INPUT_PULLUP);
+
     // reset the OLED
     pinMode(OLED_RESET, OUTPUT);
     digitalWrite(OLED_RESET, LOW);
@@ -316,6 +321,14 @@ void loop(void)
     static unsigned long last_sent = 0;
     static bool have_data = false;
 
+    if (digitalRead(PIN_BUTTON) == 0) {
+        if (otaa_data.magic == OTAA_MAGIC) {
+            Serial.println("Resetting OTAA");
+            otaa_data.magic = 0;
+            LMIC_reset();
+            LMIC_startJoining();
+        }
+    }
     // check for incoming measurement data
     while (sds011.available()) {
         uint8_t c = sds011.read();
