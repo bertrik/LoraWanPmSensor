@@ -330,6 +330,7 @@ void loop(void)
     static unsigned long last_sent = 0;
     static bool have_data = false;
 
+    // check for button to restart OTAA
     if (digitalRead(PIN_BUTTON) == 0) {
         if (otaa_data.magic == OTAA_MAGIC) {
             Serial.println("Resetting OTAA");
@@ -338,6 +339,7 @@ void loop(void)
             LMIC_startJoining();
         }
     }
+
     // check for incoming measurement data
     while (sds011.available()) {
         uint8_t c = sds011.read();
