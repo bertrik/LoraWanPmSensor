@@ -277,7 +277,6 @@ void setup(void)
     // LMIC init
     os_init();
     LMIC_reset();
-    LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
     if (otaa_data.magic == OTAA_MAGIC) {
         LMIC_setSession(otaa_data.netid, otaa_data.devaddr, otaa_data.nwkKey, otaa_data.artKey);
         print_keys();
