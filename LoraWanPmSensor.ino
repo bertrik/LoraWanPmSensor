@@ -293,9 +293,7 @@ static void send_dust(sds_meas_t * meas)
 {
     uint8_t buf[20];
 
-    if (LMIC.opmode & OP_TXRXPEND) {
-        Serial.println(F("OP_TXRXPEND, not sending"));
-    } else {
+    if ((LMIC.opmode & (OP_TXDATA|OP_TXRXPEND)) == 0) {
         // encode it
         int idx = 0;
         buf[idx++] = 0;
@@ -329,6 +327,7 @@ void loop(void)
     static sds_meas_t sds_meas;
     static unsigned long last_sent = 0;
     static bool have_data = false;
+    static u2_t opmode;
 
     // check for button to restart OTAA
     if (digitalRead(PIN_BUTTON) == 0) {
@@ -347,7 +346,6 @@ void loop(void)
             // parse it
             SdsParse(&sds_meas);
             have_data = true;
-            Serial.print(".");
         }
     }
 
@@ -356,11 +354,18 @@ void loop(void)
     if ((now - last_sent) > TX_INTERVAL) {
         last_sent = now;
         if (have_data) {
-            Serial.println("Sending dust");
             send_dust(&sds_meas);
             have_data = false;
         }
     }
+
+    // log LMIC state changes
+    if (LMIC.opmode != opmode) {
+        opmode = LMIC.opmode;
+        Serial.print("New opmode: ");
+        Serial.println(opmode, HEX);
+    }
+
     // ?
     os_runloop_once();
 }
