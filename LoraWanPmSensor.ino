@@ -293,12 +293,9 @@ static void send_dust(sds_meas_t * meas)
 {
     uint8_t buf[20];
 
-    if ((LMIC.opmode & (OP_TXDATA|OP_TXRXPEND)) == 0) {
+    if ((LMIC.opmode & (OP_TXDATA | OP_TXRXPEND)) == 0) {
         // encode it
         int idx = 0;
-        buf[idx++] = 0;
-        buf[idx++] = 1;
-
         int pm10 = 10.0 * meas->pm10;
         buf[idx++] = (pm10 >> 8) & 0xFF;
         buf[idx++] = (pm10 >> 0) & 0xFF;
@@ -338,7 +335,6 @@ void loop(void)
             LMIC_startJoining();
         }
     }
-
     // check for incoming measurement data
     while (sds011.available()) {
         uint8_t c = sds011.read();
@@ -358,14 +354,12 @@ void loop(void)
             have_data = false;
         }
     }
-
     // log LMIC state changes
     if (LMIC.opmode != opmode) {
         opmode = LMIC.opmode;
         Serial.print("New opmode: ");
         Serial.println(opmode, HEX);
     }
-
     // ?
     os_runloop_once();
 }
