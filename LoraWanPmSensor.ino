@@ -17,6 +17,22 @@
 
 #include "sds011.h"
 
+// This EUI must be in little-endian format, so least-significant-byte
+// first. When copying an EUI from ttnctl output, this means to reverse
+// the bytes. For TTN issued EUIs the last bytes should be 0xD5, 0xB3,
+// 0x70.
+static const u1_t PROGMEM APPEUI[8] = { 0x9B, 0xA0, 0x01, 0xD0, 0x7E, 0xD5, 0xB3, 0x70 };
+
+// This key should be in big endian format (or, since it is not really a
+// number but a block of memory, endianness does not really apply). In
+// practice, a key taken from ttnctl can be copied as-is.
+static const u1_t PROGMEM APPKEY[16] =
+    { 0xAA, 0x9F, 0x12, 0x45, 0x7F, 0x06, 0x64, 0xDF, 0x4C, 0x1E, 0x9F,
+    0xC9, 0x5E, 0xDA, 0x1A, 0x8A
+};
+
+const unsigned TX_INTERVAL = 10;
+
 #define OLED_I2C_ADDR 0x3C
 #define OLED_RESET 16
 #define OLED_SDA 4
@@ -63,34 +79,15 @@ void os_getDevEui(u1_t * buf)
     memcpy_P(buf, &chipid, 8);
 }
 
-// This EUI must be in little-endian format, so least-significant-byte
-// first. When copying an EUI from ttnctl output, this means to reverse
-// the bytes. For TTN issued EUIs the last bytes should be 0xD5, 0xB3,
-// 0x70.
-static const u1_t PROGMEM APPEUI[8] = { 0x9B, 0xA0, 0x01, 0xD0, 0x7E, 0xD5, 0xB3, 0x70 };
-
 void os_getArtEui(u1_t * buf)
 {
     memcpy_P(buf, APPEUI, 8);
 }
 
-// This key should be in big endian format (or, since it is not really a
-// number but a block of memory, endianness does not really apply). In
-// practice, a key taken from ttnctl can be copied as-is.
-static const u1_t PROGMEM APPKEY[16] =
-    { 0xAA, 0x9F, 0x12, 0x45, 0x7F, 0x06, 0x64, 0xDF, 0x4C, 0x1E, 0x9F,
-    0xC9, 0x5E, 0xDA, 0x1A, 0x8A
-};
-
 void os_getDevKey(u1_t * buf)
 {
     memcpy_P(buf, APPKEY, 16);
 }
-
-// Schedule TX every this many seconds (might become longer due to duty
-// cycle limitations).
-const unsigned TX_INTERVAL = 10;
-char TTN_response[30];
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
