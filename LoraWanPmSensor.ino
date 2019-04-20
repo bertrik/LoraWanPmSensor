@@ -37,12 +37,25 @@ typedef struct {
     uint32_t magic;
 } otaa_data_t;
 
+typedef struct {
+    bool update;
+    // 1st line: LoRa address
+    char loraDevEui[32];
+    // 2nd line: LoRa status
+    char loraStatus[32];
+    // 3rd line: PM10 + temperature
+    char pm10[16];
+    char temp[16];
+    // 4th line: PM2.5 + humidity
+    char pm2_5[16];
+    char humi[16];
+} screen_t;
+
 static otaa_data_t otaa_data;
-static unsigned int counter = 0;
 static uint64_t chipid;
 static SSD1306 display(OLED_I2C_ADDR, OLED_SDA, OLED_SCL);
 static SoftwareSerial sds011(PIN_RX, PIN_TX);
-
+static screen_t screen;
 
 // This should also be in little endian format, see above.
 void os_getDevEui(u1_t * buf)
@@ -105,6 +118,13 @@ static void print_keys(void)
     Serial.println("");
 }
 
+static void setLoraStatus(const char *status)
+{
+    snprintf(screen.loraStatus, sizeof(screen.loraStatus), status);
+    screen.update = true;
+    Serial.println(status);
+}
+
 void onEvent(ev_t ev)
 {
     Serial.print(os_getTime());
@@ -124,6 +144,7 @@ void onEvent(ev_t ev)
         break;
     case EV_JOINING:
         Serial.println(F("EV_JOINING"));
+        setLoraStatus("OTAA JOIN...");
         break;
     case EV_JOINED:
         Serial.println(F("EV_JOINED"));
@@ -134,12 +155,16 @@ void onEvent(ev_t ev)
         EEPROM.commit();
 
         print_keys();
+
+        setLoraStatus("JOIN OK!");
         break;
     case EV_JOIN_FAILED:
         Serial.println(F("EV_JOIN_FAILED"));
+        setLoraStatus("JOIN failed!");
         break;
     case EV_REJOIN_FAILED:
         Serial.println(F("EV_REJOIN_FAILED"));
+        setLoraStatus("REJOIN failed!");
         break;
     case EV_TXCOMPLETE:
         Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
@@ -150,6 +175,7 @@ void onEvent(ev_t ev)
             Serial.print(LMIC.dataLen);
             Serial.println(F(" bytes of payload"));
         }
+        setLoraStatus("TX complete");
         break;
     case EV_LOST_TSYNC:
         Serial.println(F("EV_LOST_TSYNC"));
@@ -169,6 +195,7 @@ void onEvent(ev_t ev)
         break;
     case EV_TXSTART:
         Serial.println(F("EV_TXSTART"));
+        setLoraStatus("TX start");
         break;
     case EV_TXCANCELED:
         Serial.println(F("EV_TXCANCELED"));
@@ -178,6 +205,7 @@ void onEvent(ev_t ev)
         break;
     case EV_JOIN_TXCOMPLETE:
         Serial.println(F("EV_JOIN_TXCOMPLETE"));
+        setLoraStatus("JOIN sent");
         break;
     default:
         Serial.print(F("Unknown event: "));
@@ -236,9 +264,6 @@ static bool sds_version(void)
 
 void setup(void)
 {
-    uint8_t buf[8];
-    char txt[32];
-
     Serial.begin(115200);
     Serial.println(F("Starting..."));
 
@@ -254,18 +279,12 @@ void setup(void)
     display.init();
     display.flipScreenVertically();
     display.setFont(ArialMT_Plain_10);
-
     display.setTextAlignment(TEXT_ALIGN_LEFT);
 
     display.drawString(0, 0, "Init!");
     display.display();
 
     chipid = ESP.getEfuseMac();
-    memcpy(buf, &chipid, sizeof(chipid));
-    snprintf(txt, sizeof(txt), "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X",
-             buf[7], buf[6], buf[5], buf[4], buf[3], buf[2], buf[1], buf[0]);
-    display.drawString(0, 40, txt);
-    display.display();
 
     // initialize the SDS011
     sds011.begin(9600);
@@ -284,6 +303,22 @@ void setup(void)
     } else {
         LMIC_startJoining();
     }
+
+    // screen
+    uint8_t id[8];
+    memcpy(id, &chipid, sizeof(chipid));
+    memset(&screen, 0, sizeof(screen));
+    for (int i = 0; i < 8; i++) {
+        char buf[8];
+        if (i == 0) {
+            strcpy(screen.loraDevEui, "");
+        } else {
+            strcat(screen.loraDevEui, ":");
+        }
+        snprintf(buf, sizeof(buf), "%02X", id[7 - i]);
+        strcat(screen.loraDevEui, buf);
+    }
+    screen.update = true;
 
     sds_version();
     sds_version();
@@ -312,12 +347,37 @@ static void send_dust(sds_meas_t * meas)
         // Prepare upstream data transmission at the next possible time.
         LMIC_setTxData2(1, buf, idx, 0);
         Serial.println(F("Sending uplink packet..."));
-        display.clear();
-        display.drawString(0, 0, "Sending uplink packet...");
-        display.drawString(0, 50, String(++counter));
-        display.display();
     }
 }
+
+static void screen_update(sds_meas_t * meas)
+{
+    char value[16];
+
+    if (screen.update) {
+        display.clear();
+
+        // 1st line
+        display.setFont(ArialMT_Plain_10);
+        display.drawString(0, 0, screen.loraDevEui);
+
+        // 2nd line
+        display.setFont(ArialMT_Plain_16);
+        display.drawString(0, 12, screen.loraStatus);
+
+        // 3rd
+        snprintf(value, sizeof(value), "PM 10: %3d ug/m3", (int) (meas->pm10));
+        display.drawString(0, 30, value);
+
+        // 4th line
+        snprintf(value, sizeof(value), "PM2.5: %3d ug/m3", (int) (meas->pm2_5));
+        display.drawString(0, 48, value);
+
+        display.display();
+        screen.update = false;
+    }
+}
+
 
 void loop(void)
 {
@@ -342,6 +402,7 @@ void loop(void)
             // parse it
             SdsParse(&sds_meas);
             have_data = true;
+            screen.update = true;
         }
     }
 
@@ -360,6 +421,9 @@ void loop(void)
         Serial.print("New opmode: ");
         Serial.println(opmode, HEX);
     }
+    // update screen
+    screen_update(&sds_meas);
+
     // ?
     os_runloop_once();
 }
