@@ -119,7 +119,13 @@ static void setLoraStatus(const char *status)
 {
     snprintf(screen.loraStatus, sizeof(screen.loraStatus), status);
     screen.update = true;
-    Serial.println(status);
+}
+
+static void showLoraDevAddr(void)
+{
+    char devaddr[16];
+    snprintf(devaddr, sizeof(devaddr), "%08X", LMIC.devaddr);
+    setLoraStatus(devaddr);
 }
 
 void onEvent(ev_t ev)
@@ -172,7 +178,7 @@ void onEvent(ev_t ev)
             Serial.print(LMIC.dataLen);
             Serial.println(F(" bytes of payload"));
         }
-        setLoraStatus("TX complete");
+        showLoraDevAddr();
         break;
     case EV_LOST_TSYNC:
         Serial.println(F("EV_LOST_TSYNC"));
