@@ -196,7 +196,7 @@ void onEvent(ev_t ev)
         break;
     case EV_TXSTART:
         Serial.println(F("EV_TXSTART"));
-        setLoraStatus("TX start");
+        setLoraStatus("Transmitting");
         break;
     case EV_TXCANCELED:
         Serial.println(F("EV_TXCANCELED"));
