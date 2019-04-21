@@ -115,17 +115,14 @@ static void print_keys(void)
     Serial.println("");
 }
 
-static void setLoraStatus(const char *status)
+static void setLoraStatus(const char *fmt, ...)
 {
-    snprintf(screen.loraStatus, sizeof(screen.loraStatus), status);
-    screen.update = true;
-}
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(screen.loraStatus, sizeof(screen.loraStatus), fmt, args);
+    va_end(args);
 
-static void showLoraDevAddr(void)
-{
-    char devaddr[16];
-    snprintf(devaddr, sizeof(devaddr), "%08X", LMIC.devaddr);
-    setLoraStatus(devaddr);
+    screen.update = true;
 }
 
 void onEvent(ev_t ev)
@@ -178,7 +175,7 @@ void onEvent(ev_t ev)
             Serial.print(LMIC.dataLen);
             Serial.println(F(" bytes of payload"));
         }
-        showLoraDevAddr();
+        setLoraStatus("%08X", LMIC.devaddr);
         break;
     case EV_LOST_TSYNC:
         Serial.println(F("EV_LOST_TSYNC"));
@@ -387,7 +384,6 @@ void loop(void)
     static sds_meas_t sds_meas;
     static unsigned long last_sent = 0;
     static bool have_data = false;
-    static u2_t opmode;
     static unsigned long button_ts = 0;
 
     // check for long button press to restart OTAA
