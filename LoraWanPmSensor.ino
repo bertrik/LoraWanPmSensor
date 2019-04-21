@@ -374,7 +374,7 @@ static void screen_update(sds_meas_t * meas)
 
         // 4th line
         snprintf(value, sizeof(value), "PM2.5: %3d ug/m3", (int) (meas->pm2_5));
-        display.drawString(0, 48, value);
+        display.drawString(0, 46, value);
 
         display.display();
         screen.update = false;
