@@ -67,8 +67,9 @@ typedef struct {
     char humi[16];
 } screen_t;
 
+// stored in "little endian" format
+static uint8_t deveui[8];
 static otaa_data_t otaa_data;
-static uint64_t chipid;
 static SSD1306 display(OLED_I2C_ADDR, OLED_SDA, OLED_SCL);
 static SoftwareSerial sds011(PIN_RX, PIN_TX);
 static screen_t screen;
@@ -76,7 +77,7 @@ static screen_t screen;
 // This should also be in little endian format, see above.
 void os_getDevEui(u1_t * buf)
 {
-    memcpy_P(buf, &chipid, 8);
+    memcpy_P(buf, deveui, 8);
 }
 
 void os_getArtEui(u1_t * buf)
@@ -270,7 +271,7 @@ void setup(void)
     // button config
     pinMode(PIN_BUTTON, INPUT_PULLUP);
 
-    // reset the OLED
+    // init the OLED
     pinMode(OLED_RESET, OUTPUT);
     digitalWrite(OLED_RESET, LOW);
     delay(50);
@@ -281,44 +282,37 @@ void setup(void)
     display.setFont(ArialMT_Plain_10);
     display.setTextAlignment(TEXT_ALIGN_LEFT);
 
-    display.drawString(0, 0, "Init!");
-    display.display();
-
-    chipid = ESP.getEfuseMac();
-
     // initialize the SDS011
     sds011.begin(9600);
     SdsInit();
 
-    EEPROM.begin(512);
-    EEPROM.get(0, otaa_data);
+    // setup of unique ids
+    uint64_t chipid = ESP.getEfuseMac();
+    deveui[0] = (chipid >> 0) & 0xFF;
+    deveui[1] = (chipid >> 8) & 0xFF;
+    deveui[2] = (chipid >> 16) & 0xFF;
+    deveui[3] = (chipid >> 24) & 0xFF;
+    deveui[4] = (chipid >> 32) & 0xFF;
+    deveui[5] = (chipid >> 40) & 0xFF;
+    deveui[6] = (chipid >> 48) & 0xFF;
+    deveui[7] = (chipid >> 56) & 0xFF;
+    snprintf(screen.loraDevEui, sizeof(screen.loraDevEui),
+             "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X", deveui[7], deveui[6], deveui[5], deveui[4],
+             deveui[3], deveui[2], deveui[1], deveui[0]);
 
     // LMIC init
     os_init();
     LMIC_reset();
     LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
+    EEPROM.begin(512);
+    EEPROM.get(0, otaa_data);
     if (otaa_data.magic == OTAA_MAGIC) {
+        setLoraStatus("Resume OTAA");
         LMIC_setSession(otaa_data.netid, otaa_data.devaddr, otaa_data.nwkKey, otaa_data.artKey);
         print_keys();
     } else {
         LMIC_startJoining();
     }
-
-    // screen
-    uint8_t id[8];
-    memcpy(id, &chipid, sizeof(chipid));
-    memset(&screen, 0, sizeof(screen));
-    for (int i = 0; i < 8; i++) {
-        char buf[8];
-        if (i == 0) {
-            strcpy(screen.loraDevEui, "");
-        } else {
-            strcat(screen.loraDevEui, ":");
-        }
-        snprintf(buf, sizeof(buf), "%02X", id[7 - i]);
-        strcat(screen.loraDevEui, buf);
-    }
-    screen.update = true;
 
     sds_version();
     sds_version();
