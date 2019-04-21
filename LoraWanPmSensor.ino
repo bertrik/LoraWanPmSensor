@@ -382,16 +382,21 @@ void loop(void)
     static unsigned long last_sent = 0;
     static bool have_data = false;
     static u2_t opmode;
+    static unsigned long button_ts = 0;
 
-    // check for button to restart OTAA
+    // check for long button press to restart OTAA
+    unsigned long ms = millis();
     if (digitalRead(PIN_BUTTON) == 0) {
-        if (otaa_data.magic == OTAA_MAGIC) {
+        if ((ms - button_ts) > 2000) {
             Serial.println("Resetting OTAA");
-            otaa_data.magic = 0;
             LMIC_reset();
             LMIC_startJoining();
+            button_ts = ms;
         }
+    } else {
+        button_ts = ms;
     }
+
     // check for incoming measurement data
     while (sds011.available()) {
         uint8_t c = sds011.read();
