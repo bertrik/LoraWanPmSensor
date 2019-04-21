@@ -423,12 +423,6 @@ void loop(void)
             have_data = false;
         }
     }
-    // log LMIC state changes
-    if (LMIC.opmode != opmode) {
-        opmode = LMIC.opmode;
-        Serial.print("New opmode: ");
-        Serial.println(opmode, HEX);
-    }
     // update screen
     screen_update(&sds_meas);
 
