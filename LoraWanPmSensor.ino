@@ -40,7 +40,7 @@ const unsigned TX_INTERVAL = 10;
 
 #define PIN_BUTTON 0
 
-#define PIN_RX  34
+#define PIN_RX  35
 #define PIN_TX  25
 
 #define OTAA_MAGIC 0xCAFEBABE
