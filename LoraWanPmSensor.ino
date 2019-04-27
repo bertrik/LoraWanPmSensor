@@ -215,17 +215,6 @@ void onEvent(ev_t ev)
     }
 }
 
-static void dump(uint8_t * buf, int len)
-{
-    int i;
-    char hex[8];
-    for (i = 0; i < len; i++) {
-        sprintf(hex, " %02X", buf[i]);
-        Serial.print(hex);
-    }
-    Serial.println();
-}
-
 static int sds_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int timeout)
 {
     uint8_t data[19];
@@ -234,7 +223,6 @@ static int sds_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int timeout)
     // send cmd
     int len = SdsCreateCmd(data, sizeof(data), cmd, cmd_len);
     sds011.write(data, len);
-    dump(data, len);
 
     // wait for response
     unsigned long start = millis();
@@ -250,17 +238,24 @@ static int sds_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int timeout)
     return 0;
 }
 
-static bool sds_version(void)
+static bool sds_version(char *version, int len)
 {
     uint8_t cmd = 7;
     uint8_t rsp[10];
     int rsp_len;
     rsp_len = sds_exchange(&cmd, 1, rsp, 1000);
-    if (rsp_len > 0) {
-        dump(rsp, rsp_len);
+
+    // parse it, example response 07 12 0A 1E 3A B7 00 00 00 00
+    if ((rsp_len > 5) && (rsp[0] == 7)) {
+        int year = rsp[1];
+        int month = rsp[2];
+        int day = rsp[3];
+        int id = (rsp[4] << 8) | rsp[5];
+        snprintf(version, len, "%04X/%2d-%2d-%2d", id, year, month, day);
+        return true;
     }
 
-    return (rsp_len > 0);
+    return false;
 }
 
 void setup(void)
@@ -314,8 +309,11 @@ void setup(void)
         LMIC_startJoining();
     }
 
-    sds_version();
-    sds_version();
+    char version[32];
+    if (sds_version(version, sizeof(version))) {
+        Serial.println("SDS version and date:");
+        Serial.println(version);
+    }
 }
 
 static void send_dust(sds_meas_t * meas)
@@ -360,11 +358,11 @@ static void screen_update(sds_meas_t * meas)
         display.drawString(0, 12, screen.loraStatus);
 
         // 3rd
-        snprintf(value, sizeof(value), "PM 10:%3d \u00B5g/m3", (int)round(meas->pm10));
+        snprintf(value, sizeof(value), "PM 10:%3d \u00B5g/m3", (int) round(meas->pm10));
         display.drawString(0, 30, value);
 
         // 4th line
-        snprintf(value, sizeof(value), "PM2.5:%3d \u00B5g/m3", (int)round(meas->pm2_5));
+        snprintf(value, sizeof(value), "PM2.5:%3d \u00B5g/m3", (int) round(meas->pm2_5));
         display.drawString(0, 46, value);
 
         display.display();
