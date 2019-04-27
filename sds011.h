@@ -14,10 +14,39 @@ typedef struct {
     uint16_t id;
 } sds_meas_t;
 
+/**
+ * Initialises the parser, call this before anything else.
+ */
 void SdsInit(void);
+
+/**
+ * Processes one byte received from the SDS011.
+ * @param b the byte
+ * @param cmd_id the command id to look for while parsing, typically 0xC0 or 0xC5
+ * @return true if a full frame was received, use SdsGetBuffer to retrieve it
+ */
 bool SdsProcess(uint8_t b, uint8_t cmd_id);
-void SdsParse(sds_meas_t *meas);
-int SdsCreateCmd(uint8_t *buf, int size, const uint8_t *cmd_data, int cmd_data_len);
-int SdsGetBuffer(uint8_t *rsp, int rsp_size);
 
+/**
+ * Parses the received data into a sds_meas_t structure.
+ * @param meas the measurement structure
+ */
+void SdsParse(sds_meas_t * meas);
 
+/**
+ * Creates a command byte array from command data.
+ * @param buf the destination buffer
+ * @param size the size of the destination buffer
+ * @param cmd_data the command data to be copied
+ * @param cmd_len the length of the command data
+ * @return the actual size of the command byte array created
+ */
+int SdsCreateCmd(uint8_t * buf, int size, const uint8_t * cmd_data, int cmd_data_len);
+
+/**
+ * Retrieves response data from the internal response data buffer.
+ * @param rsp the response data buffer
+ * @param rsp_size the response data buffer size
+ * @return the actual size of the response data buffer
+ */
+int SdsGetBuffer(uint8_t * rsp, int rsp_size);
