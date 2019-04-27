@@ -12,7 +12,7 @@
 #include <SPI.h>
 #include <SSD1306.h>
 #include "soc/efuse_reg.h"
-#include "SoftwareSerial.h"
+#include "HardwareSerial.h"
 #include "EEPROM.h"
 
 #include "sds011.h"
@@ -71,7 +71,7 @@ typedef struct {
 static uint8_t deveui[8];
 static otaa_data_t otaa_data;
 static SSD1306 display(OLED_I2C_ADDR, OLED_SDA, OLED_SCL);
-static SoftwareSerial sds011(PIN_RX, PIN_TX);
+static HardwareSerial sds011(1);
 static screen_t screen;
 
 // This should also be in little endian format, see above.
@@ -283,7 +283,7 @@ void setup(void)
     display.setTextAlignment(TEXT_ALIGN_LEFT);
 
     // initialize the SDS011
-    sds011.begin(9600);
+    sds011.begin(9600, SERIAL_8N1, PIN_RX, PIN_TX, false);
     SdsInit();
 
     // setup of unique ids
