@@ -156,9 +156,14 @@ int SdsCreateCmd(uint8_t *buf, int size, const uint8_t *cmd_data, int cmd_data_l
     return 19;
 }
 
-int SdsGetBuffer(uint8_t *rsp)
+int SdsGetBuffer(uint8_t *rsp, int rsp_size)
 {
-    memcpy(rsp, &state.buf, 10);
-    return 10;
+    int len = 10;
+    if (len > rsp_size) {
+        len = rsp_size;
+    }
+
+    memcpy(rsp, &state.buf, len);
+    return len;
 }
 

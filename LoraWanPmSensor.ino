@@ -215,7 +215,7 @@ void onEvent(ev_t ev)
     }
 }
 
-static int sds_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int timeout)
+static int sds_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int rsp_size, int timeout)
 {
     uint8_t data[19];
     int rsp_len;
@@ -230,7 +230,7 @@ static int sds_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int timeout)
         if (sds011.available()) {
             char c = sds011.read();
             if (SdsProcess(c, 0xC5)) {
-                rsp_len = SdsGetBuffer(rsp);
+                rsp_len = SdsGetBuffer(rsp, rsp_size);
                 return rsp_len;
             }
         }
@@ -238,12 +238,12 @@ static int sds_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int timeout)
     return 0;
 }
 
-static bool sds_version(char *version, int len)
+static bool sds_version(char *version, int size)
 {
     uint8_t cmd = 7;
     uint8_t rsp[10];
     int rsp_len;
-    rsp_len = sds_exchange(&cmd, 1, rsp, 1000);
+    rsp_len = sds_exchange(&cmd, 1, rsp, sizeof(rsp), 1000);
 
     // parse it, example response 07 12 0A 1E 3A B7 00 00 00 00
     if ((rsp_len > 5) && (rsp[0] == 7)) {
@@ -251,7 +251,7 @@ static bool sds_version(char *version, int len)
         int month = rsp[2];
         int day = rsp[3];
         int id = (rsp[4] << 8) | rsp[5];
-        snprintf(version, len, "%04X/%2d-%2d-%2d", id, year, month, day);
+        snprintf(version, size, "%04X/%2d-%2d-%2d", id, year, month, day);
         return true;
     }
 
@@ -311,7 +311,7 @@ void setup(void)
 
     char version[32];
     if (sds_version(version, sizeof(version))) {
-        Serial.println("SDS version and date:");
+        Serial.print("SDS version and date: ");
         Serial.println(version);
     }
 }
