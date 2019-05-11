@@ -106,12 +106,12 @@ static void print_keys(void)
     Serial.println(otaa_data.devaddr, HEX);
     Serial.print("artKey: ");
     for (int i = 0; i < sizeof(otaa_data.artKey); ++i) {
-        Serial.print(otaa_data.artKey[i], HEX);
+        Serial.printf("%02X", otaa_data.artKey[i]);
     }
     Serial.println("");
     Serial.print("nwkKey: ");
     for (int i = 0; i < sizeof(otaa_data.nwkKey); ++i) {
-        Serial.print(otaa_data.nwkKey[i], HEX);
+        Serial.printf("%02X", otaa_data.nwkKey[i]);
     }
     Serial.println("");
 }
