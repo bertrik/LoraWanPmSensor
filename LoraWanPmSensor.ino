@@ -44,6 +44,7 @@ const unsigned TX_INTERVAL = 10;
 #define PIN_TX  25
 
 #define OTAA_MAGIC 0xCAFEBABE
+#define UG_PER_M3  "\u00B5g/m\u00B3"
 
 typedef struct {
     u4_t netid = 0;
@@ -358,12 +359,12 @@ static void screen_update(sds_meas_t * meas)
         display.drawString(0, 12, screen.loraStatus);
 
         // 3rd
-        snprintf(value, sizeof(value), "PM 10:%3d \u00B5g/m3", (int) round(meas->pm10));
-        display.drawString(0, 30, value);
+        snprintf(value, sizeof(value), "PM 10:%3d ", (int) round(meas->pm10));
+        display.drawString(0, 30, String(value) + UG_PER_M3);
 
         // 4th line
-        snprintf(value, sizeof(value), "PM2.5:%3d \u00B5g/m3", (int) round(meas->pm2_5));
-        display.drawString(0, 46, value);
+        snprintf(value, sizeof(value), "PM2.5:%3d ", (int) round(meas->pm2_5));
+        display.drawString(0, 46, String(value) + UG_PER_M3);
 
         display.display();
         screen.update = false;
