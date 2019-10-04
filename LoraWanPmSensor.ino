@@ -177,7 +177,7 @@ void onEvent(ev_t ev)
             Serial.print(LMIC.dataLen);
             Serial.println(F(" bytes of payload"));
         }
-        setLoraStatus("%08X", LMIC.devaddr);
+        setLoraStatus("%08X-%d", LMIC.devaddr, LMIC.seqnoUp);
         break;
     case EV_LOST_TSYNC:
         Serial.println(F("EV_LOST_TSYNC"));
@@ -299,7 +299,6 @@ void setup(void)
     // LMIC init
     os_init();
     LMIC_reset();
-    LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
     EEPROM.begin(512);
     EEPROM.get(0, otaa_data);
     if (otaa_data.magic == OTAA_MAGIC) {
