@@ -5,6 +5,9 @@ cache:
     directories:
         - "~/.platformio"
 
+before_install:
+    - cd Esp32PmSensor
+
 install:
     - pip install -U platformio
     - platformio update
