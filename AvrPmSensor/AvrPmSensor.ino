@@ -47,7 +47,8 @@ typedef struct {
 // stored in "little endian" format
 static uint8_t deveui[8];
 static otaa_data_t otaa_data;
-static SoftwareSerial sds011(1, 1);
+static SoftwareSerial sdsSerial(1, 1);
+static SDS011 sds;
 
 // This should also be in little endian format, see above.
 void os_getDevEui(u1_t * buf)
@@ -151,16 +152,16 @@ static int sds_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int rsp_size,
     int rsp_len;
 
     // send cmd
-    int len = SdsCreateCmd(data, sizeof(data), cmd, cmd_len);
-    sds011.write(data, len);
+    int len = sds.createCommand(data, sizeof(data), cmd, cmd_len);
+    sdsSerial.write(data, len);
 
     // wait for response
     unsigned long start = millis();
     while ((millis() - start) < timeout) {
-        if (sds011.available()) {
-            char c = sds011.read();
-            if (SdsProcess(c, 0xC5)) {
-                rsp_len = SdsGetBuffer(rsp, rsp_size);
+        if (sdsSerial.available()) {
+            char c = sdsSerial.read();
+            if (sds.process(c, 0xC5)) {
+                rsp_len = sds.getBuffer(rsp, rsp_size);
                 return rsp_len;
             }
         }
@@ -195,8 +196,7 @@ void setup(void)
     UniqueIDdump(Serial);
 
     // initialize the SDS011
-    sds011.begin(9600);
-    SdsInit();
+    sdsSerial.begin(9600);
 
     // setup of unique ids
     memcpy(deveui, _UniqueID.id, 8);
@@ -268,11 +268,11 @@ void loop(void)
     static bool have_data = false;
 
     // check for incoming measurement data
-    while (sds011.available()) {
-        uint8_t c = sds011.read();
-        if (SdsProcess(c, 0xC0)) {
+    while (sdsSerial.available()) {
+        uint8_t c = sdsSerial.read();
+        if (sds.process(c, 0xC0)) {
             // parse it
-            SdsParse(&sds_meas);
+            sds.getMeasurement(&sds_meas);
             have_data = true;
         }
     }
