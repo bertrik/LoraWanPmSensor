@@ -8,34 +8,16 @@
 #define MAGIC1 0xAA
 #define MAGIC2 0xAB
 
-// parsing state
-typedef enum {
-    HEAD = 0,
-    COMMAND,
-    DATA,
-    CHECK,
-    TAIL
-} EState;
-
-typedef struct {
-    EState  state;
-    uint8_t buf[32];
-    int     size;
-    int     idx, len;
-    uint8_t sum;
-} TState;
-
-static TState state;
-
 /**
     Initializes the measurement data state machine.
  */
-void SdsInit(void)
+SDS011::SDS011(void)
 {
-    state.state = HEAD;
-    state.size = sizeof(state.buf);
-    state.idx = state.len = 0;
-    state.sum = 0;
+    _state = HEAD;
+    _size = sizeof(_buf);
+    _idx = 0;
+    _len = 0;
+    _sum = 0;
 }
 
 /**
@@ -43,51 +25,51 @@ void SdsInit(void)
     @param[in] b the byte
     @return true if a full message was received
  */
-bool SdsProcess(uint8_t b, uint8_t cmd_id)
+bool SDS011::process(uint8_t b, uint8_t cmd_id)
 {
-    switch (state.state) {
+    switch (_state) {
     // wait for header byte
     case HEAD:
         if (b == MAGIC1) {
-            state.state = COMMAND;
+            _state = COMMAND;
         }
         break;
     // receive COMMAND byte
     case COMMAND:
         if (b == cmd_id) {
-            state.sum = 0;
-            state.idx = 0;
-            state.len = 6;
-            state.state = DATA;
+            _sum = 0;
+            _idx = 0;
+            _len = 6;
+            _state = DATA;
         } else {
-            state.state = HEAD;
+            _state = HEAD;
         }
         break;
     // store data
     case DATA:
-        state.sum += b;
-        if (state.idx < state.len) {
-            state.buf[state.idx++] = b;
+        _sum += b;
+        if (_idx < _len) {
+            _buf[_idx++] = b;
         }
-        if (state.idx == state.len) {
-            state.state = CHECK;
+        if (_idx == _len) {
+            _state = CHECK;
         }
         break;
     // store checksum
     case CHECK:
-        if (b == state.sum) {
-            state.state = TAIL;
+        if (b == _sum) {
+            _state = TAIL;
         } else {
-            state.state = HEAD;
-            SdsProcess(b, cmd_id);
+            _state = HEAD;
+            process(b, cmd_id);
         }
         break;
     // wait for tail byte
     case TAIL:
-        state.state = HEAD;
+        _state = HEAD;
         return (b == MAGIC2);
     default:
-        state.state = HEAD;
+        _state = HEAD;
         break;
     }
     return false;
@@ -113,11 +95,11 @@ static uint16_t get_be(const uint8_t *buf, int idx)
     Parses a complete measurement data frame into a structure.
     @param[out] meas the parsed measurement data
  */
-void SdsParse(sds_meas_t *meas)
+void SDS011::getMeasurement(sds_meas_t *measurement)
 {
-    meas->pm2_5 = get_le(state.buf, 0) / 10.0;
-    meas->pm10 = get_le(state.buf, 2) / 10.0;
-    meas->id = get_be(state.buf, 4);
+    measurement->pm2_5 = get_le(_buf, 0) / 10.0;
+    measurement->pm10 = get_le(_buf, 2) / 10.0;
+    measurement->id = get_be(_buf, 4);
 }
 
 /**
@@ -128,7 +110,7 @@ void SdsParse(sds_meas_t *meas)
     @param[in] cmd_data_len the length of the byte array
     @return the length of the command buffer, or 0 if no command could be constructed
 */
-int SdsCreateCmd(uint8_t *buf, int size, const uint8_t *cmd_data, int cmd_data_len)
+int SDS011::createCommand(uint8_t *buf, int size, const uint8_t *cmd_data, int cmd_data_len)
 {
     // verify arguments
     if (size < 19) {
@@ -156,14 +138,14 @@ int SdsCreateCmd(uint8_t *buf, int size, const uint8_t *cmd_data, int cmd_data_l
     return 19;
 }
 
-int SdsGetBuffer(uint8_t *rsp, int rsp_size)
+int SDS011::getBuffer(uint8_t *rsp, int rsp_size)
 {
     int len = 10;
     if (len > rsp_size) {
         len = rsp_size;
     }
 
-    memcpy(rsp, &state.buf, len);
+    memcpy(rsp, &_buf, len);
     return len;
 }
 

@@ -72,7 +72,8 @@ typedef struct {
 static uint8_t deveui[8];
 static otaa_data_t otaa_data;
 static SSD1306 display(OLED_I2C_ADDR, OLED_SDA, OLED_SCL);
-static HardwareSerial sds011(1);
+static HardwareSerial sdsSerial(1);
+static SDS011 sds;
 static screen_t screen;
 
 // This should also be in little endian format, see above.
@@ -185,16 +186,16 @@ static int sds_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int rsp_size,
     int rsp_len;
 
     // send cmd
-    int len = SdsCreateCmd(data, sizeof(data), cmd, cmd_len);
-    sds011.write(data, len);
+    int len = sds.createCommand(data, sizeof(data), cmd, cmd_len);
+    sdsSerial.write(data, len);
 
     // wait for response
     unsigned long start = millis();
     while ((millis() - start) < timeout) {
-        if (sds011.available()) {
-            char c = sds011.read();
-            if (SdsProcess(c, 0xC5)) {
-                rsp_len = SdsGetBuffer(rsp, rsp_size);
+        if (sdsSerial.available()) {
+            char c = sdsSerial.read();
+            if (sds.process(c, 0xC5)) {
+                rsp_len = sds.getBuffer(rsp, rsp_size);
                 return rsp_len;
             }
         }
@@ -241,9 +242,8 @@ void setup(void)
     display.setFont(ArialMT_Plain_10);
     display.setTextAlignment(TEXT_ALIGN_LEFT);
 
-    // initialize the SDS011
-    sds011.begin(9600, SERIAL_8N1, PIN_RX, PIN_TX, false);
-    SdsInit();
+    // initialize the SDS011 serial
+    sdsSerial.begin(9600, SERIAL_8N1, PIN_RX, PIN_TX, false);
 
     // setup of unique ids
     uint64_t chipid = ESP.getEfuseMac();
@@ -355,11 +355,11 @@ void loop(void)
     }
 
     // check for incoming measurement data
-    while (sds011.available()) {
-        uint8_t c = sds011.read();
-        if (SdsProcess(c, 0xC0)) {
+    while (sdsSerial.available()) {
+        uint8_t c = sdsSerial.read();
+        if (sds.process(c, 0xC0)) {
             // parse it
-            SdsParse(&sds_meas);
+            sds.getMeasurement(&sds_meas);
             have_data = true;
             screen.update = true;
         }
