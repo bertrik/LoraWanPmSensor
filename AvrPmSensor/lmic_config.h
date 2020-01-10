@@ -6,4 +6,5 @@
 #define DISABLE_PING
 #define DISABLE_BEACONS
 
+#define CFG_noassert
 

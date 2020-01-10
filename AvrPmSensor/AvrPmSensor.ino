@@ -75,78 +75,67 @@ const lmic_pinmap lmic_pins = {
 
 static void print_keys(void)
 {
+    char hex[8];
+
     Serial.print(F("netid: "));
     Serial.println(otaa_data.netid, DEC);
     Serial.print(F("devaddr: "));
     Serial.println(otaa_data.devaddr, HEX);
     Serial.print(F("artKey: "));
     for (size_t i = 0; i < sizeof(otaa_data.artKey); ++i) {
-//        Serial.printf("%02X", otaa_data.artKey[i]);
+        snprintf(hex, sizeof(hex), " %02X", otaa_data.artKey[i]);
+        Serial.print(hex);
     }
     Serial.println("");
     Serial.print(F("nwkKey: "));
     for (size_t i = 0; i < sizeof(otaa_data.nwkKey); ++i) {
-//        Serial.printf("%02X", otaa_data.nwkKey[i]);
+        snprintf(hex, sizeof(hex), " %02X", otaa_data.nwkKey[i]);
+        Serial.print(hex);
     }
     Serial.println("");
 }
 
 static void setLoraStatus(const char *fmt, ...)
 {
-#if 0
+    char line[64];
+
     va_list args;
     va_start(args, fmt);
-    vsnprintf(screen.loraStatus, sizeof(screen.loraStatus), fmt, args);
+    vsnprintf(line, sizeof(line), fmt, args);
     va_end(args);
 
-    screen.update = true;
-#endif
+    Serial.println(line);
 }
-
-//const char *event_names[] = {LMIC_EVENT_NAME_TABLE__INIT};
 
 void onEvent(ev_t ev)
 {
     Serial.print(os_getTime());
     Serial.print(": ");
-//    Serial.println(event_names[ev]);
 
     switch (ev) {
     case EV_JOINING:
-//        setLoraStatus("OTAA JOIN...");
+        setLoraStatus("OTAA JOIN...");
         break;
     case EV_JOINED:
         LMIC_getSessionKeys(&otaa_data.netid, &otaa_data.devaddr, otaa_data.nwkKey,
                             otaa_data.artKey);
         otaa_data.magic = OTAA_MAGIC;
         EEPROM.put(0, otaa_data);
-//        EEPROM.commit();
-
         print_keys();
 
-//        setLoraStatus("JOIN OK!");
+        setLoraStatus("JOIN OK!");
         break;
     case EV_JOIN_FAILED:
-//        setLoraStatus("JOIN failed!");
-        break;
-    case EV_REJOIN_FAILED:
-//        setLoraStatus("REJOIN failed!");
+        setLoraStatus("JOIN failed!");
         break;
     case EV_TXCOMPLETE:
-        if (LMIC.txrxFlags & TXRX_ACK)
-            Serial.println(F("Received ack"));
-        if (LMIC.dataLen) {
-            Serial.print(F("Received "));
-            Serial.print(LMIC.dataLen);
-            Serial.println(F(" bytes of payload"));
-        }
-//        setLoraStatus("%08X-%d", LMIC.devaddr, LMIC.seqnoUp);
+        setLoraStatus("%08X-%d", LMIC.devaddr, LMIC.seqnoUp);
         break;
     case EV_TXSTART:
-//        setLoraStatus("Transmitting");
+        setLoraStatus("Transmitting");
         break;
     case EV_JOIN_TXCOMPLETE:
-//        setLoraStatus("JOIN sent");
+        setLoraStatus("JOIN sent");
         break;
     default:
         Serial.print(F("Unknown event: "));
@@ -205,31 +194,33 @@ void setup(void)
     Serial.println(F("Starting..."));
     UniqueIDdump(Serial);
 
-    // button config
-    pinMode(PIN_BUTTON, INPUT_PULLUP);
-
     // initialize the SDS011
     sds011.begin(9600);
     SdsInit();
 
     // setup of unique ids
     memcpy(deveui, _UniqueID.id, 8);
-    Serial.print("DEV EUI:");
+    Serial.print(F("DEV EUI:"));
+    char hex[8];
     for (int i = 0; i < 8; i++) {
-        char text[8];
-        snprintf(text, sizeof(text), " %02X", deveui[i]);
-        Serial.print(text);
+        snprintf(hex, sizeof(hex), " %02X", deveui[i]);
+        Serial.print(hex);
     }
     Serial.println();
 
+#if 0   // needs actual hardware
+    Serial.println(F("os_init()"));
     // LMIC init
     os_init();
+
+    Serial.println(F("LMIC_reset()"));
     LMIC_reset();
+#endif
 
     EEPROM.begin();
     EEPROM.get(0, otaa_data);
     if (otaa_data.magic == OTAA_MAGIC) {
-//        setLoraStatus("Resume OTAA");
+        setLoraStatus("Resume OTAA");
         LMIC_setSession(otaa_data.netid, otaa_data.devaddr, otaa_data.nwkKey, otaa_data.artKey);
         print_keys();
     } else {
@@ -241,6 +232,7 @@ void setup(void)
         Serial.print(F("SDS version and date: "));
         Serial.println(version);
     }
+    Serial.println(F("setup() done"));
 }
 
 static void send_dust(sds_meas_t * meas)
@@ -274,20 +266,6 @@ void loop(void)
     static sds_meas_t sds_meas;
     static unsigned long last_sent = 0;
     static bool have_data = false;
-    static unsigned long button_ts = 0;
-
-    // check for long button press to restart OTAA
-    unsigned long ms = millis();
-    if (digitalRead(PIN_BUTTON) == 0) {
-        if ((ms - button_ts) > 2000) {
-            Serial.println("Resetting OTAA");
-            LMIC_reset();
-            LMIC_startJoining();
-            button_ts = ms;
-        }
-    } else {
-        button_ts = ms;
-    }
 
     // check for incoming measurement data
     while (sds011.available()) {
@@ -298,6 +276,9 @@ void loop(void)
             have_data = true;
         }
     }
+    
+    // hack, REMOVE
+    have_data = true;
 
     // time to send a dust measurement?
     unsigned long now = millis() / 1000;
@@ -308,6 +289,8 @@ void loop(void)
             have_data = false;
         }
     }
-    // ?
+
+    // run LMIC periodic stuff
     os_runloop_once();
 }
+
