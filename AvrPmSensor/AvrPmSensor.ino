@@ -47,13 +47,13 @@ typedef struct {
 // stored in "little endian" format
 static uint8_t deveui[8];
 static otaa_data_t otaa_data;
-static SoftwareSerial sdsSerial(1, 1);
+//static SoftwareSerial sdsSerial(1, 1);
 static SDS011 sds;
 
 // This should also be in little endian format, see above.
 void os_getDevEui(u1_t * buf)
 {
-    memcpy_P(buf, deveui, 8);
+    memcpy(buf, deveui, 8);
 }
 
 void os_getArtEui(u1_t * buf)
@@ -70,7 +70,7 @@ void os_getDevKey(u1_t * buf)
 const lmic_pinmap lmic_pins = {
     .nss = 10,
     .rxtx = LMIC_UNUSED_PIN,
-    .rst = 0,
+    .rst = LMIC_UNUSED_PIN,
     .dio = { 4, 5, 7 }
 };
 
@@ -145,6 +145,7 @@ void onEvent(ev_t ev)
     }
 }
 
+#if 0
 static int sds_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int rsp_size,
                         unsigned int timeout)
 {
@@ -188,16 +189,16 @@ static bool sds_version(char *version, int size)
 
     return false;
 }
+#endif
 
 void setup(void)
 {
-    Serial.begin(115200);
+    Serial.begin(9600);
     Serial.println(F("Starting..."));
-    UniqueIDdump(Serial);
-
+#if 0
     // initialize the SDS011
     sdsSerial.begin(9600);
-
+#endif
     // setup of unique ids
     memcpy(deveui, _UniqueID.id, 8);
     Serial.print(F("DEV EUI:"));
@@ -208,14 +209,9 @@ void setup(void)
     }
     Serial.println();
 
-#if 0   // needs actual hardware
-    Serial.println(F("os_init()"));
     // LMIC init
-    os_init();
-
-    Serial.println(F("LMIC_reset()"));
+    os_init_ex(&lmic_pins);
     LMIC_reset();
-#endif
 
     EEPROM.begin();
     EEPROM.get(0, otaa_data);
@@ -224,14 +220,16 @@ void setup(void)
         LMIC_setSession(otaa_data.netid, otaa_data.devaddr, otaa_data.nwkKey, otaa_data.artKey);
         print_keys();
     } else {
+        setLoraStatus("Start joining");
         LMIC_startJoining();
     }
-
+#if 0
     char version[32];
     if (sds_version(version, sizeof(version))) {
         Serial.print(F("SDS version and date: "));
         Serial.println(version);
     }
+#endif
     Serial.println(F("setup() done"));
 }
 
@@ -266,7 +264,7 @@ void loop(void)
     static sds_meas_t sds_meas;
     static unsigned long last_sent = 0;
     static bool have_data = false;
-
+#if 0
     // check for incoming measurement data
     while (sdsSerial.available()) {
         uint8_t c = sdsSerial.read();
@@ -276,9 +274,12 @@ void loop(void)
             have_data = true;
         }
     }
-    
-    // hack, REMOVE
+#else
+    sds_meas.pm2_5 = 2.5;
+    sds_meas.pm10 = 10.0;
+    sds_meas.id = 0x1234;
     have_data = true;
+#endif    
 
     // time to send a dust measurement?
     unsigned long now = millis() / 1000;
