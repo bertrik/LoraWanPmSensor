@@ -53,7 +53,10 @@ static SDS011 sds;
 // This should also be in little endian format, see above.
 void os_getDevEui(u1_t * buf)
 {
-    memcpy(buf, deveui, 8);
+    // recorder devui so by default it appears in the same order on the TTN console as on the serial console 
+    for (int i = 0; i < 8; i++) {
+        buf[i] = deveui[7 - i];
+    }
 }
 
 void os_getArtEui(u1_t * buf)
@@ -137,6 +140,9 @@ void onEvent(ev_t ev)
         break;
     case EV_JOIN_TXCOMPLETE:
         setLoraStatus("JOIN sent");
+        break;
+    case EV_LINK_DEAD:
+        setLoraStatus("LINK dead");
         break;
     default:
         Serial.print(F("Unknown event: "));
