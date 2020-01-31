@@ -133,7 +133,7 @@ void onEvent(ev_t ev)
         setLoraStatus("JOIN failed!");
         break;
     case EV_TXCOMPLETE:
-        setLoraStatus("%08X-%d", LMIC.devaddr, LMIC.seqnoUp);
+        setLoraStatus("%08lX-%d", LMIC.devaddr, LMIC.seqnoUp);
         break;
     case EV_TXSTART:
         setLoraStatus("Transmitting");
