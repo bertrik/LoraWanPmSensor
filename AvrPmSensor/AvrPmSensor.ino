@@ -224,6 +224,7 @@ void setup(void)
     if (otaa_data.magic == OTAA_MAGIC) {
         setLoraStatus("Resume OTAA");
         LMIC_setSession(otaa_data.netid, otaa_data.devaddr, otaa_data.nwkKey, otaa_data.artKey);
+        LMIC.dn2Dr = DR_SF9;
         print_keys();
     } else {
         setLoraStatus("Start joining");
