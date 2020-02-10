@@ -9,6 +9,8 @@
 #include <Arduino.h>
 #include "lmic.h"
 #include <hal/hal.h>
+#include "arduino_lmic_hal_boards.h"
+
 #include <SPI.h>
 #include <SSD1306.h>
 #include "soc/efuse_reg.h"
@@ -93,12 +95,7 @@ void os_getDevKey(u1_t * buf)
 }
 
 // Pin mapping
-const lmic_pinmap lmic_pins = {
-    .nss = 18,
-    .rxtx = LMIC_UNUSED_PIN,
-    .rst = 14,
-    .dio = { 26, 33, 32 }       // Pins for the Heltec ESP32 Lora board/ TTGO Lora32 with 3D metal antenna
-};
+const lmic_pinmap lmic_pins = *Arduino_LMIC::GetPinmap_ttgo_lora32_v1();
 
 static void print_keys(void)
 {
