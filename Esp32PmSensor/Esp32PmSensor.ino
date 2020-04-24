@@ -36,14 +36,13 @@ static const u1_t PROGMEM APPKEY[16] =
 const unsigned TX_INTERVAL = 10;
 
 #define OLED_I2C_ADDR 0x3C
-#define OLED_RESET 16
-#define OLED_SDA 4
-#define OLED_SCL 15
 
-#define PIN_BUTTON 0
-
-#define PIN_RX  35
-#define PIN_TX  25
+#define PIN_OLED_RESET  16
+#define PIN_OLED_SDA    4
+#define PIN_OLED_SCL    15
+#define PIN_BUTTON      0
+#define PIN_SDS_RX      35
+#define PIN_SDS_TX      25
 
 #define OTAA_MAGIC 0xCAFEBABE
 #define UG_PER_M3  "\u00B5g/m\u00B3"
@@ -73,7 +72,7 @@ typedef struct {
 // stored in "little endian" format
 static uint8_t deveui[8];
 static otaa_data_t otaa_data;
-static SSD1306 display(OLED_I2C_ADDR, OLED_SDA, OLED_SCL);
+static SSD1306 display(OLED_I2C_ADDR, PIN_OLED_SDA, PIN_OLED_SCL);
 static HardwareSerial sdsSerial(1);
 static SDS011 sds;
 static screen_t screen;
@@ -229,10 +228,10 @@ void setup(void)
     pinMode(PIN_BUTTON, INPUT_PULLUP);
 
     // init the OLED
-    pinMode(OLED_RESET, OUTPUT);
-    digitalWrite(OLED_RESET, LOW);
+    pinMode(PIN_OLED_RESET, OUTPUT);
+    digitalWrite(PIN_OLED_RESET, LOW);
     delay(50);
-    digitalWrite(OLED_RESET, HIGH);
+    digitalWrite(PIN_OLED_RESET, HIGH);
 
     display.init();
     display.flipScreenVertically();
@@ -240,7 +239,7 @@ void setup(void)
     display.setTextAlignment(TEXT_ALIGN_LEFT);
 
     // initialize the SDS011 serial
-    sdsSerial.begin(9600, SERIAL_8N1, PIN_RX, PIN_TX, false);
+    sdsSerial.begin(9600, SERIAL_8N1, PIN_SDS_RX, PIN_SDS_TX, false);
 
     // setup of unique ids
     uint64_t chipid = ESP.getEfuseMac();
@@ -377,3 +376,4 @@ void loop(void)
     // ?
     os_runloop_once();
 }
+
