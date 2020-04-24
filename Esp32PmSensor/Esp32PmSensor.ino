@@ -195,6 +195,7 @@ static int sds_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int rsp_size,
                 return rsp_len;
             }
         }
+        yield();
     }
     return 0;
 }
