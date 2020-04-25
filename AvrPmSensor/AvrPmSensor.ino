@@ -46,7 +46,7 @@ typedef struct {
 
 // stored in "little endian" format
 static uint8_t deveui[8];
-static otaa_data_t otaa_data;
+static otaa_data_t EEMEM otaa_data;
 //static SoftwareSerial sdsSerial(1, 1);
 static SDS011 sds;
 
