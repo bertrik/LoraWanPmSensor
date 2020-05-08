@@ -245,20 +245,18 @@ static void send_dust(sds_meas_t * meas)
     uint8_t buf[20];
 
     if ((LMIC.opmode & (OP_TXDATA | OP_TXRXPEND)) == 0) {
-        // encode it
+        // encode it as Cayenne
         int idx = 0;
-        int pm10 = 10.0 * meas->pm10;
+        int pm10 = 100.0 * meas->pm10;
+        buf[idx++] = 1;
+        buf[idx++] = 2;
         buf[idx++] = (pm10 >> 8) & 0xFF;
         buf[idx++] = (pm10 >> 0) & 0xFF;
-        int pm2_5 = 10.0 * meas->pm2_5;
+        int pm2_5 = 100.0 * meas->pm2_5;
+        buf[idx++] = 2;
+        buf[idx++] = 2;
         buf[idx++] = (pm2_5 >> 8) & 0xFF;
         buf[idx++] = (pm2_5 >> 0) & 0xFF;
-
-        buf[idx++] = 0xFF;
-        buf[idx++] = 0xFF;
-
-        buf[idx++] = 0xFF;
-        buf[idx++] = 0xFF;
 
         // Prepare upstream data transmission at the next possible time.
         LMIC_setTxData2(1, buf, idx, 0);
