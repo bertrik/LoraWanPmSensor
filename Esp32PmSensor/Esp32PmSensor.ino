@@ -285,21 +285,21 @@ static void send_dust(sds_meas_t * meas)
         int idx = 0;
 
         // PM10
-        buf[idx++] = 100;
+        buf[idx++] = 1;
         buf[idx++] = 2;
         int pm10 = meas->pm10 / 0.01;
-        if (pm10 > 65535) {
-            pm10 = 65535;
+        if (pm10 > 32767) {
+            pm10 = 32767;
         }
         buf[idx++] = (pm10 >> 8) & 0xFF;
         buf[idx++] = (pm10 >> 0) & 0xFF;
 
         // PM2.5
-        buf[idx++] = 100;
+        buf[idx++] = 2;
         buf[idx++] = 2;
         int pm2_5 = meas->pm2_5 / 0.01;
-        if (pm2_5 > 65535) {
-            pm2_5 = 65535;
+        if (pm2_5 > 32767) {
+            pm2_5 = 32767;
         }
         buf[idx++] = (pm2_5 >> 8) & 0xFF;
         buf[idx++] = (pm2_5 >> 0) & 0xFF;
