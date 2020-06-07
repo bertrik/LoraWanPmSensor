@@ -25,7 +25,7 @@ SDS011::SDS011(void)
     @param[in] b the byte
     @return true if a full message was received
  */
-bool SDS011::process(uint8_t b, uint8_t cmd_id)
+bool SDS011::process(uint8_t b, uint8_t rsp_id)
 {
     switch (_state) {
     // wait for header byte
@@ -36,7 +36,7 @@ bool SDS011::process(uint8_t b, uint8_t cmd_id)
         break;
     // receive COMMAND byte
     case COMMAND:
-        if (b == cmd_id) {
+        if (b == rsp_id) {
             _sum = 0;
             _idx = 0;
             _len = 6;
@@ -61,7 +61,7 @@ bool SDS011::process(uint8_t b, uint8_t cmd_id)
             _state = TAIL;
         } else {
             _state = HEAD;
-            process(b, cmd_id);
+            process(b, rsp_id);
         }
         break;
     // wait for tail byte

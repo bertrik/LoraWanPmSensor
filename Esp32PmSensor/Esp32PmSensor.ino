@@ -19,10 +19,8 @@
 
 #include "sds011.h"
 
-// This EUI must be in little-endian format, so least-significant-byte
-// first. When copying an EUI from ttnctl output, this means to reverse
-// the bytes. For TTN issued EUIs the last bytes should be 0xD5, 0xB3,
-// 0x70.
+// This EUI must be in little-endian format, so least-significant-byte first.
+// For TTN issued EUIs the last bytes should be 0xD5, 0xB3, 0x70.
 static const u1_t PROGMEM APPEUI[8] = { 0x9B, 0xA0, 0x01, 0xD0, 0x7E, 0xD5, 0xB3, 0x70 };
 
 // This key should be in big endian format (or, since it is not really a
@@ -47,6 +45,13 @@ const unsigned TX_INTERVAL = 10;
 #define OTAA_MAGIC 0xCAFEBABE
 #define UG_PER_M3  "\u00B5g/m\u00B3"
 
+// total measurement cycle time (seconds)
+#define TIME_CYCLE      60
+// duration of warmup (seconds)
+#define TIME_WARMUP     20
+// duration of measurement (seconds)
+#define TIME_MEASURE    10
+
 typedef struct {
     u4_t netid = 0;
     devaddr_t devaddr = 0;
@@ -69,6 +74,16 @@ typedef struct {
     char humi[16];
 } screen_t;
 
+// main state machine
+typedef enum {
+    E_INIT,
+    E_IDLE,
+    E_WARMUP,
+    E_MEASURE
+} fsm_state_t;
+
+static fsm_state_t main_state;
+
 // stored in "little endian" format
 static uint8_t deveui[8];
 static otaa_data_t otaa_data;
@@ -76,6 +91,9 @@ static SSD1306 display(OLED_I2C_ADDR, PIN_OLED_SDA, PIN_OLED_SCL);
 static HardwareSerial sdsSerial(1);
 static SDS011 sds;
 static screen_t screen;
+
+// average dust measument
+static sds_meas_t avg;
 
 // This should also be in little endian format, see above.
 void os_getDevEui(u1_t * buf)
@@ -204,8 +222,7 @@ static bool sds_version(char *version, int size)
 {
     uint8_t cmd = 7;
     uint8_t rsp[10];
-    int rsp_len;
-    rsp_len = sds_exchange(&cmd, 1, rsp, sizeof(rsp), 1000);
+    int rsp_len = sds_exchange(&cmd, 1, rsp, sizeof(rsp), 1000);
 
     // parse it, example response 07 12 0A 1E 3A B7 00 00 00 00
     if ((rsp_len > 5) && (rsp[0] == 7)) {
@@ -218,6 +235,189 @@ static bool sds_version(char *version, int size)
     }
 
     return false;
+}
+
+static bool sds_fan(bool on)
+{
+    uint8_t cmd[3];
+    uint8_t rsp[10];
+
+    cmd[0] = 6;
+    cmd[1] = 1;
+    cmd[2] = on ? 1 : 0;
+    int rsp_len = sds_exchange(cmd, sizeof(cmd), rsp, sizeof(rsp), 1000);
+    if (rsp_len > 2) {
+        return rsp[2] == cmd[2];
+    }
+    return false;
+}
+
+static void send_dust(sds_meas_t * meas)
+{
+    uint8_t buf[20];
+
+    if ((LMIC.opmode & (OP_TXDATA | OP_TXRXPEND)) == 0) {
+        // encode it as Cayenne
+        int idx = 0;
+
+        // PM10
+        buf[idx++] = 1;
+        buf[idx++] = 2;
+        int pm10 = meas->pm10 / 0.01;
+        if (pm10 > 32767) {
+            pm10 = 32767;
+        }
+        buf[idx++] = (pm10 >> 8) & 0xFF;
+        buf[idx++] = (pm10 >> 0) & 0xFF;
+
+        // PM2.5
+        buf[idx++] = 2;
+        buf[idx++] = 2;
+        int pm2_5 = meas->pm2_5 / 0.01;
+        if (pm2_5 > 32767) {
+            pm2_5 = 32767;
+        }
+        buf[idx++] = (pm2_5 >> 8) & 0xFF;
+        buf[idx++] = (pm2_5 >> 0) & 0xFF;
+
+        // Prepare upstream data transmission at the next possible time.
+        LMIC_setTxData2(1, buf, idx, 0);
+        Serial.println(F("Sending uplink packet..."));
+    }
+}
+
+static void screen_update(sds_meas_t * meas, bool valid)
+{
+    char value[16];
+
+    if (screen.update) {
+        display.clear();
+
+        // 1st line
+        display.setFont(ArialMT_Plain_10);
+        display.drawString(0, 0, screen.loraDevEui);
+
+        // 2nd line
+        display.setFont(ArialMT_Plain_16);
+        display.drawString(0, 12, screen.loraStatus);
+
+        // 3rd
+        if (valid) {
+            snprintf(value, sizeof(value), "PM 10:%3d ", (int) round(meas->pm10));
+        } else {
+            snprintf(value, sizeof(value), "PM 10: - ");
+        }
+        display.drawString(0, 30, String(value) + UG_PER_M3);
+
+        // 4th line
+        if (valid) {
+            snprintf(value, sizeof(value), "PM2.5:%3d ", (int) round(meas->pm2_5));
+        } else {
+            snprintf(value, sizeof(value), "PM2.5: - ");
+        }
+        display.drawString(0, 46, String(value) + UG_PER_M3);
+
+        display.display();
+        screen.update = false;
+    }
+}
+
+static void set_fsm_state(fsm_state_t newstate)
+{
+    printf(">>> ");
+    switch (newstate) {
+    case E_INIT:    printf("E_INIT");     break;
+    case E_IDLE:    printf("E_IDLE");     break;
+    case E_WARMUP:  printf("E_WARMUP");   break;
+    case E_MEASURE: printf("E_MEASURE");  break;
+    default:
+        break;
+    }
+    printf("\n");
+    main_state = newstate;
+}
+
+static bool fsm_run(void)
+{
+    static sds_meas_t sum;
+    static int sum_num = 0;
+    static bool valid = false;
+
+    int sec = (millis() / 1000) % TIME_CYCLE;
+
+    switch (main_state) {
+    case E_INIT:
+        valid = false;
+
+        // send command to get software version
+        Serial.printf("Getting SDS version\n");
+        char version[32];
+        if (sds_version(version, sizeof(version))) {
+            Serial.print("SDS version and date: ");
+            Serial.println(version);
+            set_fsm_state(E_IDLE);
+        }
+        break;
+
+    case E_IDLE:
+        if (sec < TIME_WARMUP) {
+            // turn fan on
+            sds_fan(true);
+            set_fsm_state(E_WARMUP);
+        }
+        break;
+
+    case E_WARMUP:
+        if (sec < TIME_WARMUP) {
+            // reset sum
+            sum.pm2_5 = 0.0;
+            sum.pm10 = 0.0;
+            sum_num = 0;
+            // flush input buffer
+            while (sdsSerial.available()) {
+                sdsSerial.read();
+            }
+        } else {
+            set_fsm_state(E_MEASURE);
+        }
+        break;
+
+    case E_MEASURE:
+        if (sec < (TIME_WARMUP + TIME_MEASURE)) {
+            // process measurement
+            while (sdsSerial.available()) {
+                uint8_t c = sdsSerial.read();
+                if (sds.process(c, 0xC0)) {
+                    // parse it
+                    sds_meas_t sds_meas;
+                    sds.getMeasurement(&sds_meas);
+                    sum.pm2_5 += sds_meas.pm2_5;
+                    sum.pm10 += sds_meas.pm10;
+                    sum_num++;
+                }
+            }
+        } else {
+            // turn the fan off
+            sds_fan(false);
+
+            // get average filter value and send it
+            if (sum_num > 0) {
+                valid = true;
+                avg.pm2_5 = sum.pm2_5 / sum_num;
+                avg.pm10 = sum.pm10 / sum_num;
+                send_dust(&avg);
+            }
+
+            set_fsm_state(E_IDLE);
+        }
+        break;
+
+    default:
+        set_fsm_state(E_INIT);
+        break;
+    }
+
+    return valid;
 }
 
 void setup(void)
@@ -269,81 +469,12 @@ void setup(void)
         LMIC_startJoining();
     }
 
-    char version[32];
-    if (sds_version(version, sizeof(version))) {
-        Serial.print("SDS version and date: ");
-        Serial.println(version);
-    }
+    // fan on, this makes the SDS011 respond to version commands
+    sds_fan(true);
 }
-
-static void send_dust(sds_meas_t * meas)
-{
-    uint8_t buf[20];
-
-    if ((LMIC.opmode & (OP_TXDATA | OP_TXRXPEND)) == 0) {
-        // encode it as Cayenne
-        int idx = 0;
-
-        // PM10
-        buf[idx++] = 1;
-        buf[idx++] = 2;
-        int pm10 = meas->pm10 / 0.01;
-        if (pm10 > 32767) {
-            pm10 = 32767;
-        }
-        buf[idx++] = (pm10 >> 8) & 0xFF;
-        buf[idx++] = (pm10 >> 0) & 0xFF;
-
-        // PM2.5
-        buf[idx++] = 2;
-        buf[idx++] = 2;
-        int pm2_5 = meas->pm2_5 / 0.01;
-        if (pm2_5 > 32767) {
-            pm2_5 = 32767;
-        }
-        buf[idx++] = (pm2_5 >> 8) & 0xFF;
-        buf[idx++] = (pm2_5 >> 0) & 0xFF;
-
-        // Prepare upstream data transmission at the next possible time.
-        LMIC_setTxData2(1, buf, idx, 0);
-        Serial.println(F("Sending uplink packet..."));
-    }
-}
-
-static void screen_update(sds_meas_t * meas)
-{
-    char value[16];
-
-    if (screen.update) {
-        display.clear();
-
-        // 1st line
-        display.setFont(ArialMT_Plain_10);
-        display.drawString(0, 0, screen.loraDevEui);
-
-        // 2nd line
-        display.setFont(ArialMT_Plain_16);
-        display.drawString(0, 12, screen.loraStatus);
-
-        // 3rd
-        snprintf(value, sizeof(value), "PM 10:%3d ", (int) round(meas->pm10));
-        display.drawString(0, 30, String(value) + UG_PER_M3);
-
-        // 4th line
-        snprintf(value, sizeof(value), "PM2.5:%3d ", (int) round(meas->pm2_5));
-        display.drawString(0, 46, String(value) + UG_PER_M3);
-
-        display.display();
-        screen.update = false;
-    }
-}
-
 
 void loop(void)
 {
-    static sds_meas_t sds_meas;
-    static unsigned long last_sent = 0;
-    static bool have_data = false;
     static unsigned long button_ts = 0;
 
     // check for long button press to restart OTAA
@@ -359,30 +490,13 @@ void loop(void)
         button_ts = ms;
     }
 
-    // check for incoming measurement data
-    while (sdsSerial.available()) {
-        uint8_t c = sdsSerial.read();
-        if (sds.process(c, 0xC0)) {
-            // parse it
-            sds.getMeasurement(&sds_meas);
-            have_data = true;
-            screen.update = true;
-        }
-    }
+    // run the state machine
+    bool have_data = fsm_run();
 
-    // time to send a dust measurement?
-    unsigned long now = millis() / 1000;
-    if ((now - last_sent) > TX_INTERVAL) {
-        last_sent = now;
-        if (have_data) {
-            send_dust(&sds_meas);
-            have_data = false;
-        }
-    }
     // update screen
-    screen_update(&sds_meas);
+    screen_update(&avg, have_data);
 
-    // ?
+    // run LoRa process
     os_runloop_once();
 }
 

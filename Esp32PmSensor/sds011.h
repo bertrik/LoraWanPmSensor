@@ -36,7 +36,7 @@ private:
 public:
     SDS011();
 
-    bool process(uint8_t b, uint8_t cmd_id);
+    bool process(uint8_t b, uint8_t rsp_id);
 
     /**
      * Parses the received data into a sds_meas_t structure.
