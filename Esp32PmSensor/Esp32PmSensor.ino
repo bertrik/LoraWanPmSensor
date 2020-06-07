@@ -282,7 +282,6 @@ static void send_dust(sds_meas_t * meas)
 
         // Prepare upstream data transmission at the next possible time.
         LMIC_setTxData2(1, buf, idx, 0);
-        Serial.println(F("Sending uplink packet..."));
     }
 }
 
