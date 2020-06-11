@@ -19,9 +19,9 @@
 
 #include "sds011.h"
 
-// This EUI must be in little-endian format, so least-significant-byte first.
-// For TTN issued EUIs the last bytes should be 0xD5, 0xB3, 0x70.
-static const u1_t PROGMEM APPEUI[8] = { 0x9B, 0xA0, 0x01, 0xD0, 0x7E, 0xD5, 0xB3, 0x70 };
+// This EUI must be in BIG-ENDIAN format, so least-significant-byte first.
+// For TTN issued EUIs the first bytes should be 0x70, 0xB3, 0xD5.
+static const u1_t PROGMEM APPEUI[8] = { 0x70, 0xB3, 0xD5, 0x7E, 0xD0, 0x01, 0xA0, 0x9B };
 
 // This key should be in big endian format (or, since it is not really a
 // number but a block of memory, endianness does not really apply). In
@@ -103,7 +103,9 @@ void os_getDevEui(u1_t * buf)
 
 void os_getArtEui(u1_t * buf)
 {
-    memcpy_P(buf, APPEUI, 8);
+    for (int i = 0; i < 8; i++) {
+        buf[i] = APPEUI[7 - i];
+    }
 }
 
 void os_getDevKey(u1_t * buf)
