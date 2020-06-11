@@ -98,7 +98,9 @@ static sds_meas_t avg;
 // This should also be in little endian format, see above.
 void os_getDevEui(u1_t * buf)
 {
-    memcpy_P(buf, deveui, 8);
+    for (int i = 0; i < 8; i++) {
+        buf[i] = deveui[7 - i];
+    }
 }
 
 void os_getArtEui(u1_t * buf)
@@ -445,17 +447,17 @@ void setup(void)
 
     // setup of unique ids
     uint64_t chipid = ESP.getEfuseMac();
-    deveui[0] = (chipid >> 0) & 0xFF;
-    deveui[1] = (chipid >> 8) & 0xFF;
-    deveui[2] = (chipid >> 16) & 0xFF;
-    deveui[3] = (chipid >> 24) & 0xFF;
-    deveui[4] = (chipid >> 32) & 0xFF;
-    deveui[5] = (chipid >> 40) & 0xFF;
-    deveui[6] = (chipid >> 48) & 0xFF;
-    deveui[7] = (chipid >> 56) & 0xFF;
+    deveui[0] = (chipid >> 56) & 0xFF;
+    deveui[1] = (chipid >> 48) & 0xFF;
+    deveui[2] = (chipid >> 40) & 0xFF;
+    deveui[3] = (chipid >> 32) & 0xFF;
+    deveui[4] = (chipid >> 24) & 0xFF;
+    deveui[5] = (chipid >> 16) & 0xFF;
+    deveui[6] = (chipid >> 8) & 0xFF;
+    deveui[7] = (chipid >> 0) & 0xFF;
     snprintf(screen.loraDevEui, sizeof(screen.loraDevEui),
-             "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X", deveui[7], deveui[6], deveui[5], deveui[4],
-             deveui[3], deveui[2], deveui[1], deveui[0]);
+             "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X", deveui[0], deveui[1], deveui[2], deveui[3],
+             deveui[4], deveui[5], deveui[6], deveui[7]);
 
     // LMIC init
     os_init();
