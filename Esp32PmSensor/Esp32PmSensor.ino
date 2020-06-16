@@ -13,6 +13,7 @@
 
 #include <SPI.h>
 #include <SSD1306.h>
+#include <SparkFunBME280.h>
 #include "soc/efuse_reg.h"
 #include "HardwareSerial.h"
 #include "EEPROM.h"
@@ -86,6 +87,8 @@ static fsm_state_t main_state;
 static uint8_t deveui[8];
 static otaa_data_t otaa_data;
 static SSD1306 display(OLED_I2C_ADDR, PIN_OLED_SDA, PIN_OLED_SCL);
+static BME280 bme280;
+static bool bme280Found;
 static HardwareSerial sdsSerial(1);
 static SDS011 sds;
 static screen_t screen;
@@ -254,7 +257,7 @@ static bool sds_fan(bool on)
     return false;
 }
 
-static void send_dust(sds_meas_t * meas)
+static void send_dust(sds_meas_t * meas, float temperature, float humidity, bool tempHumiValid)
 {
     uint8_t buf[20];
 
@@ -281,6 +284,21 @@ static void send_dust(sds_meas_t * meas)
         }
         buf[idx++] = (pm2_5 >> 8) & 0xFF;
         buf[idx++] = (pm2_5 >> 0) & 0xFF;
+
+        if (tempHumiValid) {
+            // temperature
+            int tempInt = temperature / 0.1;
+            buf[idx++] = 3;
+            buf[idx++] = 103;
+            buf[idx++] = highByte(tempInt);
+            buf[idx++] = lowByte(tempInt);
+
+            // humidity
+            int humiInt = humidity / 0.5;
+            buf[idx++] = 4;
+            buf[idx++] = 104;
+            buf[idx++] = humiInt;
+        }
 
         // Prepare upstream data transmission at the next possible time.
         LMIC_setTxData2(1, buf, idx, 0);
@@ -406,7 +424,16 @@ static bool fsm_run(void)
                 valid = true;
                 avg.pm2_5 = sum.pm2_5 / sum_num;
                 avg.pm10 = sum.pm10 / sum_num;
-                send_dust(&avg);
+
+                // take temperature/humidity sample
+                float tempC = 0.0;
+                float humidity = 0.0;
+                if (bme280Found) {
+                    tempC = bme280.readTempC();
+                    humidity = bme280.readFloatHumidity();
+                }
+
+                send_dust(&avg, tempC, humidity, bme280Found);
             }
 
             set_fsm_state(E_IDLE);
@@ -442,6 +469,10 @@ void setup(void)
 
     // initialize the SDS011 serial
     sdsSerial.begin(9600, SERIAL_8N1, PIN_SDS_RX, PIN_SDS_TX, false);
+
+    // initialize the BME280
+    bme280.setI2CAddress(0x76);
+    bme280Found = bme280.beginI2C();
 
     // setup of unique ids
     uint64_t chipid = ESP.getEfuseMac();
