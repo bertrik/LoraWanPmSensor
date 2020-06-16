@@ -31,8 +31,6 @@ static const u1_t PROGMEM APPKEY[16] =
     0xC9, 0x5E, 0xDA, 0x1A, 0x8A
 };
 
-const unsigned TX_INTERVAL = 10;
-
 #define OLED_I2C_ADDR 0x3C
 
 #define PIN_OLED_RESET  16
@@ -46,7 +44,7 @@ const unsigned TX_INTERVAL = 10;
 #define UG_PER_M3  "\u00B5g/m\u00B3"
 
 // total measurement cycle time (seconds)
-#define TIME_CYCLE      60
+#define TIME_CYCLE      145
 // duration of warmup (seconds)
 #define TIME_WARMUP     20
 // duration of measurement (seconds)
