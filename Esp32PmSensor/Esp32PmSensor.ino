@@ -55,6 +55,7 @@ typedef struct {
     devaddr_t devaddr = 0;
     u1_t nwkKey[16];
     u1_t artKey[16];
+    u1_t dn2Dr;
     uint32_t magic;
 } otaa_data_t;
 
@@ -159,6 +160,7 @@ void onEvent(ev_t ev)
     case EV_JOINED:
         LMIC_getSessionKeys(&otaa_data.netid, &otaa_data.devaddr, otaa_data.nwkKey,
                             otaa_data.artKey);
+        otaa_data.dn2Dr = LMIC.dn2Dr;
         otaa_data.magic = OTAA_MAGIC;
         EEPROM.put(0, otaa_data);
         EEPROM.commit();
@@ -465,6 +467,7 @@ void setup(void)
     if (otaa_data.magic == OTAA_MAGIC) {
         setLoraStatus("Resume OTAA");
         LMIC_setSession(otaa_data.netid, otaa_data.devaddr, otaa_data.nwkKey, otaa_data.artKey);
+        LMIC.dn2Dr = otaa_data.dn2Dr;
         print_keys();
     } else {
         LMIC_startJoining();
