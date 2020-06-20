@@ -189,10 +189,10 @@ static void onEventCallback(void *user, ev_t ev)
         setLoraStatus("%08X-%d", LMIC.devaddr, LMIC.seqnoUp);
         break;
     case EV_TXSTART:
-        setLoraStatus("Transmitting");
+        setLoraStatus("Transmit SF%d", getSf(LMIC.rps) + 6);
         break;
     case EV_RXSTART:
-        setLoraStatus("Receiving ...");
+        setLoraStatus("Receive SF%d",  getSf(LMIC.rps) + 6);
         break;
     case EV_JOIN_TXCOMPLETE:
         setLoraStatus("JOIN sent");
