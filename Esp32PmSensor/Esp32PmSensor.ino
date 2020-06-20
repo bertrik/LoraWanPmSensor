@@ -120,24 +120,6 @@ void os_getDevKey(u1_t * buf)
 // Pin mapping
 const lmic_pinmap lmic_pins = *Arduino_LMIC::GetPinmap_ttgo_lora32_v1();
 
-static void print_keys(void)
-{
-    Serial.print("netid: ");
-    Serial.println(otaa_data.netid, DEC);
-    Serial.print("devaddr: ");
-    Serial.println(otaa_data.devaddr, HEX);
-    Serial.print("artKey: ");
-    for (int i = 0; i < sizeof(otaa_data.artKey); ++i) {
-        Serial.printf("%02X", otaa_data.artKey[i]);
-    }
-    Serial.println("");
-    Serial.print("nwkKey: ");
-    for (int i = 0; i < sizeof(otaa_data.nwkKey); ++i) {
-        Serial.printf("%02X", otaa_data.nwkKey[i]);
-    }
-    Serial.println("");
-}
-
 static void setLoraStatus(const char *fmt, ...)
 {
     va_list args;
@@ -167,8 +149,6 @@ static void onEventCallback(void *user, ev_t ev)
         otaa_data.magic = OTAA_MAGIC;
         EEPROM.put(0, otaa_data);
         EEPROM.commit();
-
-        print_keys();
 
         setLoraStatus("JOIN OK!");
         break;
@@ -504,7 +484,6 @@ void setup(void)
         setLoraStatus("Resume OTAA");
         LMIC_setSession(otaa_data.netid, otaa_data.devaddr, otaa_data.nwkKey, otaa_data.artKey);
         LMIC.dn2Dr = otaa_data.dn2Dr;
-        print_keys();
     } else {
         LMIC_startJoining();
     }
