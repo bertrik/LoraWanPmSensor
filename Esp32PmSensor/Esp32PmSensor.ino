@@ -150,7 +150,7 @@ static void setLoraStatus(const char *fmt, ...)
 
 const char *event_names[] = {LMIC_EVENT_NAME_TABLE__INIT};
 
-void onEvent(ev_t ev)
+static void onEventCallback(void *user, ev_t ev)
 {
     Serial.print(os_getTime());
     Serial.print(": ");
@@ -190,6 +190,9 @@ void onEvent(ev_t ev)
         break;
     case EV_TXSTART:
         setLoraStatus("Transmitting");
+        break;
+    case EV_RXSTART:
+        setLoraStatus("Receiving ...");
         break;
     case EV_JOIN_TXCOMPLETE:
         setLoraStatus("JOIN sent");
@@ -493,6 +496,8 @@ void setup(void)
     // LMIC init
     os_init();
     LMIC_reset();
+    LMIC_registerEventCb(onEventCallback, NULL);
+
     EEPROM.begin(512);
     EEPROM.get(0, otaa_data);
     if (otaa_data.magic == OTAA_MAGIC) {
