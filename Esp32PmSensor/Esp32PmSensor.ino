@@ -327,6 +327,13 @@ static void screen_format_dust(sds_meas_t * meas)
     screen.update = true;
 }
 
+static void screen_format_version(const char *serial, const char *date)
+{
+    screen.dust1 = String("SDS011: ") + serial;
+    screen.dust2 = String("BME280: ") + (bme280Found ? "OK" : "FAIL");
+    screen.update = true;
+}
+
 static void set_fsm_state(fsm_state_t newstate)
 {
     printf(">>> ");
@@ -369,9 +376,7 @@ static void fsm_run(void)
         char date[16];
         if (sds_version(serial, date)) {
             Serial.printf("Serial=%s, date=%s\n", serial, date);
-            screen.dust1 = String("SDS011: ") + serial;
-            screen.dust2 = String("BME280: ") + (bme280Found ? "OK" : "FAIL");
-            screen.update = true;
+            screen_format_version(serial, date);
             set_fsm_state(E_VERSION);
         }
         break;
