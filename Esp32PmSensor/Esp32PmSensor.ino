@@ -39,12 +39,15 @@ static const u1_t APPKEY[] = {
 #define PIN_BUTTON      0
 #define PIN_SDS_RX      35
 #define PIN_SDS_TX      25
+#define PIN_LED         2
 
 #define OTAA_MAGIC 0xCAFEBABE
 #define UG_PER_M3  "\u00B5g/m\u00B3"
 
 // total measurement cycle time (seconds)
 #define TIME_CYCLE      145
+// time to show version info
+#define TIME_VERSION    5
 // duration of warmup (seconds)
 #define TIME_WARMUP     20
 // duration of measurement (seconds)
@@ -74,6 +77,7 @@ typedef struct {
 // main state machine
 typedef enum {
     E_INIT,
+    E_VERSION,
     E_IDLE,
     E_WARMUP,
     E_MEASURE
@@ -330,6 +334,9 @@ static void set_fsm_state(fsm_state_t newstate)
     case E_INIT:
         printf("E_INIT");
         break;
+    case E_VERSION:
+        printf("E_VERSION");
+        break;
     case E_IDLE:
         printf("E_IDLE");
         break;
@@ -362,10 +369,17 @@ static void fsm_run(void)
         char date[16];
         if (sds_version(serial, date)) {
             Serial.printf("Serial=%s, date=%s\n", serial, date);
+            screen.dust1 = String("SDS011: ") + serial;
+            screen.dust2 = String("BME280: ") + (bme280Found ? "OK" : "FAIL");
+            screen.update = true;
+            set_fsm_state(E_VERSION);
+        }
+        break;
+
+    case E_VERSION:
+        if (sec > TIME_VERSION) {
             set_fsm_state(E_IDLE);
         }
-        screen.dust1 = String("SDS011: ") + serial;
-        screen.dust2 = String("BME280: ") + (bme280Found ? "OK" : "FAIL");
         break;
 
     case E_IDLE:
@@ -438,12 +452,19 @@ static void fsm_run(void)
         set_fsm_state(E_INIT);
         break;
     }
+
+    // when measuring, light the LED
+    digitalWrite(PIN_LED, main_state == E_MEASURE);
 }
 
 void setup(void)
 {
     Serial.begin(115200);
     Serial.println(F("Starting..."));
+
+    // LED config
+    pinMode(PIN_LED, OUTPUT);
+    digitalWrite(PIN_LED, 1);
 
     // button config
     pinMode(PIN_BUTTON, INPUT_PULLUP);
