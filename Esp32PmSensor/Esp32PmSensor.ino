@@ -22,14 +22,13 @@
 
 // This EUI must be in BIG-ENDIAN format, so least-significant-byte first.
 // For TTN issued EUIs the first bytes should be 0x70, 0xB3, 0xD5.
-static const u1_t PROGMEM APPEUI[8] = { 0x70, 0xB3, 0xD5, 0x7E, 0xD0, 0x01, 0xA0, 0x9B };
+static const u1_t APPEUI[8] = { 0x70, 0xB3, 0xD5, 0x7E, 0xD0, 0x01, 0xA0, 0x9B };
 
 // This key should be in big endian format (or, since it is not really a
 // number but a block of memory, endianness does not really apply). In
 // practice, a key taken from ttnctl can be copied as-is.
-static const u1_t PROGMEM APPKEY[16] =
-    { 0xAA, 0x9F, 0x12, 0x45, 0x7F, 0x06, 0x64, 0xDF, 0x4C, 0x1E, 0x9F,
-    0xC9, 0x5E, 0xDA, 0x1A, 0x8A
+static const u1_t APPKEY[] = {
+    0xAA, 0x9F, 0x12, 0x45, 0x7F, 0x06, 0x64, 0xDF, 0x4C, 0x1E, 0x9F, 0xC9, 0x5E, 0xDA, 0x1A, 0x8A
 };
 
 #define OLED_I2C_ADDR 0x3C
@@ -80,6 +79,9 @@ typedef enum {
     E_MEASURE
 } fsm_state_t;
 
+// Pin mapping
+const lmic_pinmap lmic_pins = *Arduino_LMIC::GetPinmap_ttgo_lora32_v1();
+
 static fsm_state_t main_state;
 
 // stored in "little endian" format
@@ -112,11 +114,8 @@ void os_getArtEui(u1_t * buf)
 
 void os_getDevKey(u1_t * buf)
 {
-    memcpy_P(buf, APPKEY, 16);
+    memcpy(buf, APPKEY, 16);
 }
-
-// Pin mapping
-const lmic_pinmap lmic_pins = *Arduino_LMIC::GetPinmap_ttgo_lora32_v1();
 
 static void setLoraStatus(const char *fmt, ...)
 {
@@ -128,7 +127,7 @@ static void setLoraStatus(const char *fmt, ...)
     screen.update = true;
 }
 
-const char *event_names[] = {LMIC_EVENT_NAME_TABLE__INIT};
+const char *event_names[] = { LMIC_EVENT_NAME_TABLE__INIT };
 
 static void onEventCallback(void *user, ev_t ev)
 {
@@ -141,8 +140,7 @@ static void onEventCallback(void *user, ev_t ev)
         setLoraStatus("OTAA JOIN...");
         break;
     case EV_JOINED:
-        LMIC_getSessionKeys(&otaa_data.netid, &otaa_data.devaddr, otaa_data.nwkKey,
-                            otaa_data.artKey);
+        LMIC_getSessionKeys(&otaa_data.netid, &otaa_data.devaddr, otaa_data.nwkKey, otaa_data.artKey);
         otaa_data.dn2Dr = LMIC.dn2Dr;
         otaa_data.magic = OTAA_MAGIC;
         EEPROM.put(0, otaa_data);
@@ -170,7 +168,7 @@ static void onEventCallback(void *user, ev_t ev)
         setLoraStatus("Transmit SF%d", getSf(LMIC.rps) + 6);
         break;
     case EV_RXSTART:
-        setLoraStatus("Receive SF%d",  getSf(LMIC.rps) + 6);
+        setLoraStatus("Receive SF%d", getSf(LMIC.rps) + 6);
         break;
     case EV_JOIN_TXCOMPLETE:
         setLoraStatus("JOIN sent");
@@ -283,7 +281,6 @@ static void send_dust(sds_meas_t * meas, float temperature, float humidity, bool
             buf[idx++] = 104;
             buf[idx++] = humiInt;
         }
-
         // Prepare upstream data transmission at the next possible time.
         LMIC_setTxData2(1, buf, idx, 0);
     }
@@ -313,7 +310,7 @@ static void screen_update(void)
     }
 }
 
-static void screen_format_dust(sds_meas_t *meas)
+static void screen_format_dust(sds_meas_t * meas)
 {
     char value[16];
 
@@ -330,10 +327,18 @@ static void set_fsm_state(fsm_state_t newstate)
 {
     printf(">>> ");
     switch (newstate) {
-    case E_INIT:    printf("E_INIT");     break;
-    case E_IDLE:    printf("E_IDLE");     break;
-    case E_WARMUP:  printf("E_WARMUP");   break;
-    case E_MEASURE: printf("E_MEASURE");  break;
+    case E_INIT:
+        printf("E_INIT");
+        break;
+    case E_IDLE:
+        printf("E_IDLE");
+        break;
+    case E_WARMUP:
+        printf("E_WARMUP");
+        break;
+    case E_MEASURE:
+        printf("E_MEASURE");
+        break;
     default:
         break;
     }
@@ -421,7 +426,6 @@ static void fsm_run(void)
                     tempC = bme280.readTempC();
                     humidity = bme280.readFloatHumidity();
                 }
-
                 // show averaged particulate matter and send it
                 screen_format_dust(&avg);
                 send_dust(&avg, tempC, humidity, bme280Found);
@@ -520,4 +524,3 @@ void loop(void)
     // run LoRa process
     os_runloop_once();
 }
-
