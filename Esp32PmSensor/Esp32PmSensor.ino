@@ -345,6 +345,7 @@ static void fsm_run(void)
 {
     static sds_meas_t sum;
     static int sum_num = 0;
+    sds_meas_t sds_meas;
 
     int sec = (millis() / 1000) % TIME_CYCLE;
 
@@ -372,15 +373,19 @@ static void fsm_run(void)
 
     case E_WARMUP:
         if (sec < TIME_WARMUP) {
+            // read/show measurements while warming up
+            while (sdsSerial.available()) {
+                uint8_t c = sdsSerial.read();
+                if (sds.process(c, 0xC0)) {
+                    sds.getMeasurement(&sds_meas);
+                    screen_format_dust(&sds_meas);
+                }
+            }
+        } else {
             // reset sum
             sum.pm2_5 = 0.0;
             sum.pm10 = 0.0;
             sum_num = 0;
-            // flush input buffer
-            while (sdsSerial.available()) {
-                sdsSerial.read();
-            }
-        } else {
             set_fsm_state(E_MEASURE);
         }
         break;
@@ -391,9 +396,10 @@ static void fsm_run(void)
             while (sdsSerial.available()) {
                 uint8_t c = sdsSerial.read();
                 if (sds.process(c, 0xC0)) {
-                    // parse it
-                    sds_meas_t sds_meas;
+                    // show individual measurement
                     sds.getMeasurement(&sds_meas);
+                    screen_format_dust(&sds_meas);
+                    // average it
                     sum.pm2_5 += sds_meas.pm2_5;
                     sum.pm10 += sds_meas.pm10;
                     sum_num++;
@@ -403,7 +409,7 @@ static void fsm_run(void)
             // turn the fan off
             sds_fan(false);
 
-            // get average filter value and send it
+            // calculate average particulate matter
             if (sum_num > 0) {
                 avg.pm2_5 = sum.pm2_5 / sum_num;
                 avg.pm10 = sum.pm10 / sum_num;
@@ -416,10 +422,10 @@ static void fsm_run(void)
                     humidity = bme280.readFloatHumidity();
                 }
 
-                send_dust(&avg, tempC, humidity, bme280Found);
+                // show averaged particulate matter and send it
                 screen_format_dust(&avg);
+                send_dust(&avg, tempC, humidity, bme280Found);
             }
-
             set_fsm_state(E_IDLE);
         }
         break;
