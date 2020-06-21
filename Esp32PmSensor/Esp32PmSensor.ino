@@ -66,12 +66,10 @@ typedef struct {
     char loraDevEui[32];
     // 2nd line: LoRa status
     char loraStatus[32];
-    // 3rd line: PM10 + temperature
-    char pm10[16];
-    char temp[16];
-    // 4th line: PM2.5 + humidity
-    char pm2_5[16];
-    char humi[16];
+    // 3rd line: PM10
+    String dust1;
+    // 4th line: PM2.5
+    String dust2;
 } screen_t;
 
 // main state machine
@@ -208,7 +206,7 @@ static int sds_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int rsp_size,
     return 0;
 }
 
-static bool sds_version(char *version, int size)
+static bool sds_version(char *serial, char *date)
 {
     uint8_t cmd = 7;
     uint8_t rsp[10];
@@ -220,7 +218,8 @@ static bool sds_version(char *version, int size)
         int month = rsp[2];
         int day = rsp[3];
         int id = (rsp[4] << 8) | rsp[5];
-        snprintf(version, size, "%04X/%2d-%2d-%2d", id, year, month, day);
+        sprintf(serial, "%04X", id);
+        sprintf(date, "%2d-%2d-%2d", year, month, day);
         return true;
     }
 
@@ -290,10 +289,8 @@ static void send_dust(sds_meas_t * meas, float temperature, float humidity, bool
     }
 }
 
-static void screen_update(sds_meas_t * meas, bool valid)
+static void screen_update(void)
 {
-    char value[16];
-
     if (screen.update) {
         display.clear();
 
@@ -306,24 +303,27 @@ static void screen_update(sds_meas_t * meas, bool valid)
         display.drawString(0, 12, screen.loraStatus);
 
         // 3rd
-        if (valid) {
-            snprintf(value, sizeof(value), "PM 10:%3d ", (int) round(meas->pm10));
-        } else {
-            snprintf(value, sizeof(value), "PM 10: - ");
-        }
-        display.drawString(0, 30, String(value) + UG_PER_M3);
+        display.drawString(0, 30, screen.dust1);
 
         // 4th line
-        if (valid) {
-            snprintf(value, sizeof(value), "PM2.5:%3d ", (int) round(meas->pm2_5));
-        } else {
-            snprintf(value, sizeof(value), "PM2.5: - ");
-        }
-        display.drawString(0, 46, String(value) + UG_PER_M3);
+        display.drawString(0, 46, screen.dust2);
 
         display.display();
         screen.update = false;
     }
+}
+
+static void screen_format_dust(sds_meas_t *meas)
+{
+    char value[16];
+
+    snprintf(value, sizeof(value), "PM 10:%3d ", (int) round(meas->pm10));
+    screen.dust1 = String(value) + UG_PER_M3;
+
+    snprintf(value, sizeof(value), "PM 10:%3d ", (int) round(meas->pm2_5));
+    screen.dust2 = String(value) + UG_PER_M3;
+
+    screen.update = true;
 }
 
 static void set_fsm_state(fsm_state_t newstate)
@@ -341,26 +341,25 @@ static void set_fsm_state(fsm_state_t newstate)
     main_state = newstate;
 }
 
-static bool fsm_run(void)
+static void fsm_run(void)
 {
     static sds_meas_t sum;
     static int sum_num = 0;
-    static bool valid = false;
 
     int sec = (millis() / 1000) % TIME_CYCLE;
 
     switch (main_state) {
     case E_INIT:
-        valid = false;
-
         // send command to get software version
         Serial.printf("Getting SDS version\n");
-        char version[32];
-        if (sds_version(version, sizeof(version))) {
-            Serial.print("SDS version and date: ");
-            Serial.println(version);
+        char serial[8];
+        char date[16];
+        if (sds_version(serial, date)) {
+            Serial.printf("Serial=%s, date=%s\n", serial, date);
             set_fsm_state(E_IDLE);
         }
+        screen.dust1 = String("SDS011: ") + serial;
+        screen.dust2 = String("BME280: ") + (bme280Found ? "OK" : "FAIL");
         break;
 
     case E_IDLE:
@@ -406,7 +405,6 @@ static bool fsm_run(void)
 
             // get average filter value and send it
             if (sum_num > 0) {
-                valid = true;
                 avg.pm2_5 = sum.pm2_5 / sum_num;
                 avg.pm10 = sum.pm10 / sum_num;
 
@@ -419,6 +417,7 @@ static bool fsm_run(void)
                 }
 
                 send_dust(&avg, tempC, humidity, bme280Found);
+                screen_format_dust(&avg);
             }
 
             set_fsm_state(E_IDLE);
@@ -429,8 +428,6 @@ static bool fsm_run(void)
         set_fsm_state(E_INIT);
         break;
     }
-
-    return valid;
 }
 
 void setup(void)
@@ -500,7 +497,6 @@ void loop(void)
     unsigned long ms = millis();
     if (digitalRead(PIN_BUTTON) == 0) {
         if ((ms - button_ts) > 2000) {
-            Serial.println("Resetting OTAA");
             LMIC_reset();
             LMIC_startJoining();
             button_ts = ms;
@@ -509,11 +505,11 @@ void loop(void)
         button_ts = ms;
     }
 
-    // run the state machine
-    bool have_data = fsm_run();
+    // run the measurement state machine
+    fsm_run();
 
     // update screen
-    screen_update(&avg, have_data);
+    screen_update();
 
     // run LoRa process
     os_runloop_once();
