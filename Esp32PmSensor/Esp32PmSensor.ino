@@ -63,6 +63,12 @@ typedef struct {
 } otaa_data_t;
 
 typedef struct {
+    float humidity;
+    float temperature;
+    float pressure;
+} bme_meas_t;
+
+typedef struct {
     bool update;
     // 1st line: LoRa address
     char loraDevEui[32];
@@ -243,7 +249,7 @@ static bool sds_fan(bool on)
     return false;
 }
 
-static void send_dust(sds_meas_t * meas, float temperature, float humidity, bool tempHumiValid)
+static void send_dust(sds_meas_t * meas, bme_meas_t * bme, bool bmeValid)
 {
     uint8_t buf[20];
 
@@ -271,19 +277,26 @@ static void send_dust(sds_meas_t * meas, float temperature, float humidity, bool
         buf[idx++] = (pm2_5 >> 8) & 0xFF;
         buf[idx++] = (pm2_5 >> 0) & 0xFF;
 
-        if (tempHumiValid) {
+        if (bmeValid) {
             // temperature
-            int tempInt = temperature / 0.1;
+            int tempInt = bme->temperature / 0.1;
             buf[idx++] = 3;
             buf[idx++] = 103;
             buf[idx++] = highByte(tempInt);
             buf[idx++] = lowByte(tempInt);
 
             // humidity
-            int humiInt = humidity / 0.5;
+            int humiInt = bme->humidity / 0.5;
             buf[idx++] = 4;
             buf[idx++] = 104;
             buf[idx++] = humiInt;
+
+            // pressure
+            int presInt = bme->pressure / 10.0;
+            buf[idx++] = 5;
+            buf[idx++] = 115;
+            buf[idx++] = highByte(presInt);
+            buf[idx++] = lowByte(presInt);
         }
         // Prepare upstream data transmission at the next possible time.
         LMIC_setTxData2(1, buf, idx, 0);
@@ -437,17 +450,16 @@ static void fsm_run(void)
             if (sum_num > 0) {
                 avg.pm2_5 = sum.pm2_5 / sum_num;
                 avg.pm10 = sum.pm10 / sum_num;
-
                 // take temperature/humidity sample
-                float tempC = 0.0;
-                float humidity = 0.0;
+                bme_meas_t bme = {0.0, 0.0, 0.0};
                 if (bme280Found) {
-                    tempC = bme280.readTempC();
-                    humidity = bme280.readFloatHumidity();
+                    bme.temperature = bme280.readTempC();
+                    bme.humidity = bme280.readFloatHumidity();
+                    bme.pressure = bme280.readFloatPressure();
                 }
                 // show averaged particulate matter and send it
                 screen_format_dust(&avg);
-                send_dust(&avg, tempC, humidity, bme280Found);
+                send_dust(&avg, &bme, bme280Found);
             }
             set_fsm_state(E_IDLE);
         }
