@@ -321,7 +321,7 @@ static void screen_format_dust(sds_meas_t * meas)
     snprintf(value, sizeof(value), "PM 10:%3d ", (int) round(meas->pm10));
     screen.dust1 = String(value) + UG_PER_M3;
 
-    snprintf(value, sizeof(value), "PM 10:%3d ", (int) round(meas->pm2_5));
+    snprintf(value, sizeof(value), "PM2.5:%3d ", (int) round(meas->pm2_5));
     screen.dust2 = String(value) + UG_PER_M3;
 
     screen.update = true;
