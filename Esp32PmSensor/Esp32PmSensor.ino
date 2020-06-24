@@ -100,6 +100,7 @@ static otaa_data_t otaa_data;
 static SSD1306 display(OLED_I2C_ADDR, PIN_OLED_SDA, PIN_OLED_SCL);
 static BME280 bme280;
 static bool bme280Found;
+static char bme280Version[8] = "FAIL";
 static HardwareSerial sdsSerial(1);
 static SDS011 sds;
 static screen_t screen;
@@ -340,10 +341,10 @@ static void screen_format_dust(sds_meas_t * meas)
     screen.update = true;
 }
 
-static void screen_format_version(const char *serial, const char *date)
+static void screen_format_version(const char *sdsVersion, const char *bmeVersion)
 {
-    screen.dust1 = String("SDS011: ") + serial;
-    screen.dust2 = String("BME280: ") + (bme280Found ? "OK" : "FAIL");
+    screen.dust1 = String("SDS011: ") + sdsVersion;
+    screen.dust2 = String("BME280: ") + bmeVersion;
     screen.update = true;
 }
 
@@ -389,7 +390,7 @@ static void fsm_run(void)
         char date[16];
         if (sds_version(serial, date)) {
             Serial.printf("Serial=%s, date=%s\n", serial, date);
-            screen_format_version(serial, date);
+            screen_format_version(serial, bme280Version);
             set_fsm_state(E_VERSION);
         }
         break;
@@ -474,6 +475,21 @@ static void fsm_run(void)
     digitalWrite(PIN_LED, main_state == E_MEASURE);
 }
 
+static bool findBME280(char *version)
+{
+    bme280.setI2CAddress(0x76);
+    if (bme280.beginI2C()) {
+        strcpy(version, "0x76");
+        return true;
+    }
+    bme280.setI2CAddress(0x77);
+    if (bme280.beginI2C()) {
+        strcpy(version, "0x77");
+        return true;
+    }
+    return false;
+}
+
 void setup(void)
 {
     Serial.begin(115200);
@@ -501,8 +517,7 @@ void setup(void)
     sdsSerial.begin(9600, SERIAL_8N1, PIN_SDS_RX, PIN_SDS_TX, false);
 
     // initialize the BME280
-    bme280.setI2CAddress(0x76);
-    bme280Found = bme280.beginI2C();
+    bme280Found = findBME280(bme280Version);
 
     // setup of unique ids
     uint64_t chipid = ESP.getEfuseMac();
