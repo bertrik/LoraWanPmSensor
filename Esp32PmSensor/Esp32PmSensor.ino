@@ -83,7 +83,6 @@ typedef struct {
 // main state machine
 typedef enum {
     E_INIT,
-    E_VERSION,
     E_IDLE,
     E_WARMUP,
     E_MEASURE
@@ -99,9 +98,11 @@ static uint8_t deveui[8];
 static otaa_data_t otaa_data;
 static SSD1306 display(OLED_I2C_ADDR, PIN_OLED_SDA, PIN_OLED_SCL);
 static BME280 bme280;
-static bool bme280Found;
-static char bme280Version[8] = "FAIL";
+static bool bmeFound = false;
+static char bmeVersion[8] = "FAIL!";
 static HardwareSerial sdsSerial(1);
+static bool sdsFound = false;
+static char sdsVersion[8] = "FAIL!";
 static SDS011 sds;
 static screen_t screen;
 
@@ -355,9 +356,6 @@ static void set_fsm_state(fsm_state_t newstate)
     case E_INIT:
         printf("E_INIT");
         break;
-    case E_VERSION:
-        printf("E_VERSION");
-        break;
     case E_IDLE:
         printf("E_IDLE");
         break;
@@ -385,18 +383,20 @@ static void fsm_run(void)
     switch (main_state) {
     case E_INIT:
         // send command to get software version
-        Serial.printf("Getting SDS version\n");
-        char serial[8];
-        char date[16];
-        if (sds_version(serial, date)) {
-            Serial.printf("Serial=%s, date=%s\n", serial, date);
-            screen_format_version(serial, bme280Version);
-            set_fsm_state(E_VERSION);
+        if (!bmeFound) {
+            Serial.printf("Detecting BME280 ...\n");
+            bmeFound = findBME280(bmeVersion);
+            Serial.printf("Found BME280, i2c=%s\n", bmeVersion);
+            screen_format_version(sdsVersion, bmeVersion);
         }
-        break;
-
-    case E_VERSION:
-        if (sec > TIME_VERSION) {
+        if (!sdsFound) {
+            char sdsDate[16];
+            Serial.printf("Detecting SDS011 ...\n");
+            sdsFound = sds_version(sdsVersion, sdsDate);
+            Serial.printf("Found SDS011, serial=%s, date=%s\n", sdsVersion, sdsDate);
+            screen_format_version(sdsVersion, bmeVersion);
+        }
+        if (sdsFound && (sec > TIME_VERSION)) {
             set_fsm_state(E_IDLE);
         }
         break;
@@ -453,14 +453,14 @@ static void fsm_run(void)
                 avg.pm10 = sum.pm10 / sum_num;
                 // take temperature/humidity sample
                 bme_meas_t bme = {0.0, 0.0, 0.0};
-                if (bme280Found) {
+                if (bmeFound) {
                     bme.temperature = bme280.readTempC();
                     bme.humidity = bme280.readFloatHumidity();
                     bme.pressure = bme280.readFloatPressure();
                 }
                 // show averaged particulate matter and send it
                 screen_format_dust(&avg);
-                send_dust(&avg, &bme, bme280Found);
+                send_dust(&avg, &bme, bmeFound);
             }
             set_fsm_state(E_IDLE);
         }
@@ -515,9 +515,6 @@ void setup(void)
 
     // initialize the SDS011 serial
     sdsSerial.begin(9600, SERIAL_8N1, PIN_SDS_RX, PIN_SDS_TX, false);
-
-    // initialize the BME280
-    bme280Found = findBME280(bme280Version);
 
     // setup of unique ids
     uint64_t chipid = ESP.getEfuseMac();
