@@ -61,6 +61,12 @@ typedef struct {
     u1_t dn2Dr;
     u1_t rx1DrOffset;
     u1_t rxDelay;
+    u4_t channelFreq[MAX_CHANNELS];
+    u2_t channelDrMap[MAX_CHANNELS];
+    u4_t channelDlFreq[MAX_CHANNELS];
+    band_t bands[MAX_BANDS];
+    u2_t channelMap;
+
     char magic[8];
 } otaa_data_t;
 
@@ -150,6 +156,13 @@ static void otaa_save(void)
     otaa_data.dn2Dr = LMIC.dn2Dr;
     otaa_data.rx1DrOffset = LMIC.rx1DrOffset;
     otaa_data.rxDelay = LMIC.rxDelay;
+
+    memcpy(otaa_data.channelFreq, LMIC.channelFreq, sizeof(otaa_data.channelFreq));
+    memcpy(otaa_data.channelDrMap, LMIC.channelDrMap, sizeof(otaa_data.channelDrMap));
+    memcpy(otaa_data.channelDlFreq, LMIC.channelDlFreq, sizeof(otaa_data.channelDlFreq));
+    memcpy(otaa_data.bands, LMIC.bands, sizeof(otaa_data.bands));
+    otaa_data.channelMap = LMIC.channelMap;
+
     strcpy(otaa_data.magic, OTAA_MAGIC);
     EEPROM.put(0, otaa_data);
     EEPROM.commit();
@@ -167,6 +180,13 @@ static bool otaa_restore(void)
     LMIC.dn2Dr = otaa_data.dn2Dr;
     LMIC.rx1DrOffset = otaa_data.rx1DrOffset;
     LMIC.rxDelay = otaa_data.rxDelay;
+
+    memcpy(LMIC.channelFreq, otaa_data.channelFreq, sizeof(LMIC.channelFreq));
+    memcpy(LMIC.channelDrMap, otaa_data.channelDrMap, sizeof(LMIC.channelDrMap));
+    memcpy(LMIC.channelDlFreq, otaa_data.channelDlFreq, sizeof(LMIC.channelDlFreq));
+    memcpy(LMIC.bands, otaa_data.bands, sizeof(LMIC.bands));
+    LMIC.channelMap = otaa_data.channelMap;
+
     return true;
 }
 
