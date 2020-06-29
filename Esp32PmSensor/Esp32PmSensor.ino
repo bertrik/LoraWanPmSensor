@@ -268,12 +268,12 @@ static bool sds_version(char *serial, char *date)
 
     // parse it, example response 07 12 0A 1E 3A B7 00 00 00 00
     if ((rsp_len > 5) && (rsp[0] == 7)) {
-        int year = rsp[1];
+        int year = 2000 + rsp[1];
         int month = rsp[2];
         int day = rsp[3];
         int id = (rsp[4] << 8) | rsp[5];
         sprintf(serial, "%04X", id);
-        sprintf(date, "%2d-%2d-%2d", year, month, day);
+        sprintf(date, "%4d-%2d-%2d", year, month, day);
         return true;
     }
 
