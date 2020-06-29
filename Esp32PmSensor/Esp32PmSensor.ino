@@ -212,11 +212,11 @@ static void onEventCallback(void *user, ev_t ev)
         break;
     case EV_TXCOMPLETE:
         if (LMIC.txrxFlags & TXRX_ACK)
-            Serial.println(F("Received ack"));
+            Serial.println("Received ack");
         if (LMIC.dataLen) {
-            Serial.print(F("Received "));
+            Serial.print("Received ");
             Serial.print(LMIC.dataLen);
-            Serial.println(F(" bytes of payload"));
+            Serial.println(" bytes of payload");
         }
         setLoraStatus("%08X-%d", LMIC.devaddr, LMIC.seqnoUp);
         break;
@@ -230,7 +230,7 @@ static void onEventCallback(void *user, ev_t ev)
         setLoraStatus("JOIN sent");
         break;
     default:
-        Serial.print(F("Unknown event: "));
+        Serial.print("Unknown event: ");
         Serial.println((unsigned) ev);
         break;
     }
@@ -537,7 +537,7 @@ static bool findBME280(char *version)
 void setup(void)
 {
     Serial.begin(115200);
-    Serial.println(F("Starting..."));
+    Serial.println("Starting...");
 
     // LED config
     pinMode(PIN_LED, OUTPUT);
