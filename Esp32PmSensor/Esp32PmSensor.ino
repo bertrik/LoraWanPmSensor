@@ -41,8 +41,8 @@ static const u1_t APPKEY[] = {
 #define PIN_SDS_TX      25
 #define PIN_LED         2
 
-#define OTAA_MAGIC 0xCAFEBABE
-#define UG_PER_M3  "\u00B5g/m\u00B3"
+#define OTAA_MAGIC      "MAGIC"
+#define UG_PER_M3       "\u00B5g/m\u00B3"
 
 // total measurement cycle time (seconds)
 #define TIME_CYCLE      145
@@ -59,7 +59,9 @@ typedef struct {
     u1_t nwkKey[16];
     u1_t artKey[16];
     u1_t dn2Dr;
-    uint32_t magic;
+    u1_t rx1DrOffset;
+    u1_t rxDelay;
+    char magic[8];
 } otaa_data_t;
 
 typedef struct {
@@ -95,7 +97,6 @@ static fsm_state_t main_state;
 
 // stored in "little endian" format
 static uint8_t deveui[8];
-static otaa_data_t otaa_data;
 static SSD1306 display(OLED_I2C_ADDR, PIN_OLED_SDA, PIN_OLED_SCL);
 static BME280 bme280;
 static bool bmeFound = false;
@@ -141,6 +142,34 @@ static void setLoraStatus(const char *fmt, ...)
 
 const char *event_names[] = { LMIC_EVENT_NAME_TABLE__INIT };
 
+static void otaa_save(void)
+{
+    otaa_data_t otaa_data;
+
+    LMIC_getSessionKeys(&otaa_data.netid, &otaa_data.devaddr, otaa_data.nwkKey, otaa_data.artKey);
+    otaa_data.dn2Dr = LMIC.dn2Dr;
+    otaa_data.rx1DrOffset = LMIC.rx1DrOffset;
+    otaa_data.rxDelay = LMIC.rxDelay;
+    strcpy(otaa_data.magic, OTAA_MAGIC);
+    EEPROM.put(0, otaa_data);
+    EEPROM.commit();
+}
+
+static bool otaa_restore(void)
+{
+    otaa_data_t otaa_data;
+
+    EEPROM.get(0, otaa_data);
+    if (strcmp(otaa_data.magic, OTAA_MAGIC) != 0) {
+        return false;
+    }
+    LMIC_setSession(otaa_data.netid, otaa_data.devaddr, otaa_data.nwkKey, otaa_data.artKey);
+    LMIC.dn2Dr = otaa_data.dn2Dr;
+    LMIC.rx1DrOffset = otaa_data.rx1DrOffset;
+    LMIC.rxDelay = otaa_data.rxDelay;
+    return true;
+}
+
 static void onEventCallback(void *user, ev_t ev)
 {
     Serial.print(os_getTime());
@@ -152,12 +181,7 @@ static void onEventCallback(void *user, ev_t ev)
         setLoraStatus("OTAA JOIN...");
         break;
     case EV_JOINED:
-        LMIC_getSessionKeys(&otaa_data.netid, &otaa_data.devaddr, otaa_data.nwkKey, otaa_data.artKey);
-        otaa_data.dn2Dr = LMIC.dn2Dr;
-        otaa_data.magic = OTAA_MAGIC;
-        EEPROM.put(0, otaa_data);
-        EEPROM.commit();
-
+        otaa_save();
         setLoraStatus("JOIN OK!");
         break;
     case EV_JOIN_FAILED:
@@ -536,11 +560,8 @@ void setup(void)
     LMIC_registerEventCb(onEventCallback, NULL);
 
     EEPROM.begin(512);
-    EEPROM.get(0, otaa_data);
-    if (otaa_data.magic == OTAA_MAGIC) {
+    if (otaa_restore()) {
         setLoraStatus("Resume OTAA");
-        LMIC_setSession(otaa_data.netid, otaa_data.devaddr, otaa_data.nwkKey, otaa_data.artKey);
-        LMIC.dn2Dr = otaa_data.dn2Dr;
     } else {
         LMIC_startJoining();
     }
