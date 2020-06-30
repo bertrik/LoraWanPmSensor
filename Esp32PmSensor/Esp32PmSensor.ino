@@ -430,14 +430,18 @@ static void fsm_run(void)
         if (!bmeFound) {
             Serial.printf("Detecting BME280 ...\n");
             bmeFound = findBME280(bmeVersion);
-            Serial.printf("Found BME280, i2c=%s\n", bmeVersion);
+            if (bmeFound) {
+                Serial.printf("Found BME280, i2c=%s\n", bmeVersion);
+            }
             screen_format_version(sdsVersion, bmeVersion);
         }
         if (!sdsFound) {
             char sdsDate[16];
             Serial.printf("Detecting SDS011 ...\n");
             sdsFound = sds_version(sdsVersion, sdsDate);
-            Serial.printf("Found SDS011, serial=%s, date=%s\n", sdsVersion, sdsDate);
+            if (sdsFound) {
+                Serial.printf("Found SDS011, serial=%s, date=%s\n", sdsVersion, sdsDate);
+            }
             screen_format_version(sdsVersion, bmeVersion);
         }
         if (sdsFound && (sec > TIME_VERSION)) {
