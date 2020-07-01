@@ -37,9 +37,9 @@ static const u1_t APPKEY[] = {
 #define PIN_OLED_SDA    4
 #define PIN_OLED_SCL    15
 #define PIN_BUTTON      0
-#define PIN_SDS_RX      35
-#define PIN_SDS_TX      25
-#define PIN_LED         2
+#define PIN_SDS_RX      22
+#define PIN_SDS_TX      23
+#define PIN_VEXT        21
 
 #define OTAA_MAGIC      "MAGIC"
 #define UG_PER_M3       "\u00B5g/m\u00B3"
@@ -97,7 +97,7 @@ typedef enum {
 } fsm_state_t;
 
 // Pin mapping
-const lmic_pinmap lmic_pins = *Arduino_LMIC::GetPinmap_ttgo_lora32_v1();
+const lmic_pinmap lmic_pins = *Arduino_LMIC::GetPinmap_ThisBoard();
 
 static fsm_state_t main_state;
 
@@ -520,7 +520,7 @@ static void fsm_run(void)
     }
 
     // when measuring, light the LED
-    digitalWrite(PIN_LED, main_state == E_MEASURE);
+    digitalWrite(LED_BUILTIN, main_state == E_MEASURE);
 }
 
 static bool findBME280(char *version)
@@ -543,9 +543,13 @@ void setup(void)
     Serial.begin(115200);
     Serial.println("Starting...");
 
+    // VEXT config: 0 = enable Vext
+    pinMode(PIN_VEXT, OUTPUT);
+    digitalWrite(PIN_VEXT, 0);
+
     // LED config
-    pinMode(PIN_LED, OUTPUT);
-    digitalWrite(PIN_LED, 1);
+    pinMode(LED_BUILTIN, OUTPUT);
+    digitalWrite(LED_BUILTIN, 0);
 
     // button config
     pinMode(PIN_BUTTON, INPUT_PULLUP);
