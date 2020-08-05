@@ -16,7 +16,6 @@
 #include <SparkFunBME280.h>
 #include "soc/efuse_reg.h"
 #include "HardwareSerial.h"
-#include "EEPROM.h"
 
 #include "sds011.h"
 
@@ -41,7 +40,6 @@ static const u1_t APPKEY[] = {
 #define PIN_SDS_TX      23
 #define PIN_VEXT        21
 
-#define OTAA_MAGIC      "MAGIC"
 #define UG_PER_M3       "\u00B5g/m\u00B3"
 
 // total measurement cycle time (seconds)
@@ -52,23 +50,6 @@ static const u1_t APPKEY[] = {
 #define TIME_WARMUP     20
 // duration of measurement (seconds)
 #define TIME_MEASURE    10
-
-typedef struct {
-    u4_t netid = 0;
-    devaddr_t devaddr = 0;
-    u1_t nwkKey[16];
-    u1_t artKey[16];
-    u1_t dn2Dr;
-    u1_t rx1DrOffset;
-    u1_t rxDelay;
-    u4_t channelFreq[MAX_CHANNELS];
-    u2_t channelDrMap[MAX_CHANNELS];
-    u4_t channelDlFreq[MAX_CHANNELS];
-    band_t bands[MAX_BANDS];
-    u2_t channelMap;
-
-    char magic[8];
-} otaa_data_t;
 
 typedef struct {
     float humidity;
@@ -148,48 +129,6 @@ static void setLoraStatus(const char *fmt, ...)
 
 const char *event_names[] = { LMIC_EVENT_NAME_TABLE__INIT };
 
-static void otaa_save(void)
-{
-    otaa_data_t otaa_data;
-
-    LMIC_getSessionKeys(&otaa_data.netid, &otaa_data.devaddr, otaa_data.nwkKey, otaa_data.artKey);
-    otaa_data.dn2Dr = LMIC.dn2Dr;
-    otaa_data.rx1DrOffset = LMIC.rx1DrOffset;
-    otaa_data.rxDelay = LMIC.rxDelay;
-
-    memcpy(otaa_data.channelFreq, LMIC.channelFreq, sizeof(otaa_data.channelFreq));
-    memcpy(otaa_data.channelDrMap, LMIC.channelDrMap, sizeof(otaa_data.channelDrMap));
-    memcpy(otaa_data.channelDlFreq, LMIC.channelDlFreq, sizeof(otaa_data.channelDlFreq));
-    memcpy(otaa_data.bands, LMIC.bands, sizeof(otaa_data.bands));
-    otaa_data.channelMap = LMIC.channelMap;
-
-    strcpy(otaa_data.magic, OTAA_MAGIC);
-    EEPROM.put(0, otaa_data);
-    EEPROM.commit();
-}
-
-static bool otaa_restore(void)
-{
-    otaa_data_t otaa_data;
-
-    EEPROM.get(0, otaa_data);
-    if (strcmp(otaa_data.magic, OTAA_MAGIC) != 0) {
-        return false;
-    }
-    LMIC_setSession(otaa_data.netid, otaa_data.devaddr, otaa_data.nwkKey, otaa_data.artKey);
-    LMIC.dn2Dr = otaa_data.dn2Dr;
-    LMIC.rx1DrOffset = otaa_data.rx1DrOffset;
-    LMIC.rxDelay = otaa_data.rxDelay;
-
-    memcpy(LMIC.channelFreq, otaa_data.channelFreq, sizeof(LMIC.channelFreq));
-    memcpy(LMIC.channelDrMap, otaa_data.channelDrMap, sizeof(LMIC.channelDrMap));
-    memcpy(LMIC.channelDlFreq, otaa_data.channelDlFreq, sizeof(LMIC.channelDlFreq));
-    memcpy(LMIC.bands, otaa_data.bands, sizeof(LMIC.bands));
-    LMIC.channelMap = otaa_data.channelMap;
-
-    return true;
-}
-
 static void onEventCallback(void *user, ev_t ev)
 {
     Serial.print(os_getTime());
@@ -201,7 +140,6 @@ static void onEventCallback(void *user, ev_t ev)
         setLoraStatus("OTAA JOIN...");
         break;
     case EV_JOINED:
-        otaa_save();
         setLoraStatus("JOIN OK!");
         break;
     case EV_JOIN_FAILED:
@@ -586,13 +524,7 @@ void setup(void)
     os_init();
     LMIC_reset();
     LMIC_registerEventCb(onEventCallback, NULL);
-
-    EEPROM.begin(512);
-    if (otaa_restore()) {
-        setLoraStatus("Resume OTAA");
-    } else {
-        LMIC_startJoining();
-    }
+    LMIC_startJoining();
 
     // fan on, this makes the SDS011 respond to version commands
     sds_fan(true);
