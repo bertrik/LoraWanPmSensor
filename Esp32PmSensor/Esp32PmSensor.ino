@@ -19,13 +19,11 @@
 
 #include "sds011.h"
 
-// This EUI must be in BIG-ENDIAN format, so least-significant-byte first.
+// This EUI must be in BIG-ENDIAN format, most-significant byte (MSB).
 // For TTN issued EUIs the first bytes should be 0x70, 0xB3, 0xD5.
 static const u1_t APPEUI[8] = { 0x70, 0xB3, 0xD5, 0x7E, 0xD0, 0x01, 0xA0, 0x9B };
 
-// This key should be in big endian format (or, since it is not really a
-// number but a block of memory, endianness does not really apply). In
-// practice, a key taken from ttnctl can be copied as-is.
+// This key should be in big endian format as well, see above.
 static const u1_t APPKEY[] = {
     0xAA, 0x9F, 0x12, 0x45, 0x7F, 0x06, 0x64, 0xDF, 0x4C, 0x1E, 0x9F, 0xC9, 0x5E, 0xDA, 0x1A, 0x8A
 };
