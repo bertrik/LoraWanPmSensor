@@ -20,7 +20,6 @@
 #include "sds011.h"
 
 // This EUI must be in BIG-ENDIAN format, most-significant byte (MSB).
-// In TTN console switch format with the <> button and choose msb with ⇄
 // For TTN issued EUIs the first bytes should be 0x70, 0xB3, 0xD5.
 static const u1_t APPEUI[8] = { 0x70, 0xB3, 0xD5, 0x7E, 0xD0, 0x01, 0xA0, 0x9B };
 
