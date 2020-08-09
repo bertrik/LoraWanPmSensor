@@ -95,7 +95,6 @@ static screen_t screen;
 // average dust measument
 static sds_meas_t avg;
 
-// This should also be in little endian format, see above.
 void os_getDevEui(u1_t * buf)
 {
     for (int i = 0; i < 8; i++) {
