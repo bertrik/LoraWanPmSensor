@@ -245,8 +245,8 @@ static void send_dust(sds_meas_t * meas, bme_meas_t * bme, bool bmeValid)
         if (pm10 > 32767) {
             pm10 = 32767;
         }
-        buf[idx++] = (pm10 >> 8) & 0xFF;
-        buf[idx++] = (pm10 >> 0) & 0xFF;
+        buf[idx++] = highByte(pm10);
+        buf[idx++] = lowByte(pm10);
 
         // PM2.5
         buf[idx++] = 2;
@@ -255,8 +255,8 @@ static void send_dust(sds_meas_t * meas, bme_meas_t * bme, bool bmeValid)
         if (pm2_5 > 32767) {
             pm2_5 = 32767;
         }
-        buf[idx++] = (pm2_5 >> 8) & 0xFF;
-        buf[idx++] = (pm2_5 >> 0) & 0xFF;
+        buf[idx++] = highByte(pm2_5);
+        buf[idx++] = lowByte(pm2_5);
 
         if (bmeValid) {
             // temperature
