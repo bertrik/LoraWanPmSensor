@@ -41,13 +41,15 @@ static const u1_t APPKEY[] = {
 #define UG_PER_M3       "\u00B5g/m\u00B3"
 
 // total measurement cycle time (seconds)
-#define TIME_CYCLE      145
+#define TIME_CYCLE      270
 // time to show version info
 #define TIME_VERSION    5
 // duration of warmup (seconds)
 #define TIME_WARMUP     20
 // duration of measurement (seconds)
 #define TIME_MEASURE    10
+// max duration of send phase (seconds)
+#define TIME_SEND       30
 
 typedef struct {
     float humidity;
@@ -69,10 +71,12 @@ typedef struct {
 
 // main state machine
 typedef enum {
-    E_INIT,
+    E_INIT = 0,
     E_IDLE,
     E_WARMUP,
-    E_MEASURE
+    E_MEASURE,
+    E_SEND,
+    E_LAST
 } fsm_state_t;
 
 // Pin mapping
@@ -91,9 +95,12 @@ static bool sdsFound = false;
 static char sdsVersion[8] = "FAIL!";
 static SDS011 sds;
 static screen_t screen;
+static int time_send;
 
 // average dust measument
 static sds_meas_t avg;
+// bme measurement
+static bme_meas_t bme;
 
 void os_getDevEui(u1_t * buf)
 {
@@ -330,24 +337,10 @@ static void screen_format_version(const char *sdsVersion, const char *bmeVersion
 
 static void set_fsm_state(fsm_state_t newstate)
 {
-    printf(">>> ");
-    switch (newstate) {
-    case E_INIT:
-        printf("E_INIT");
-        break;
-    case E_IDLE:
-        printf("E_IDLE");
-        break;
-    case E_WARMUP:
-        printf("E_WARMUP");
-        break;
-    case E_MEASURE:
-        printf("E_MEASURE");
-        break;
-    default:
-        break;
+    static const char* states[] = { "E_INIT", "E_IDLE", "E_WARMUP", "E_MEASURE", "E_SEND" };
+    if (newstate <= E_LAST) {
+        printf(">>> %s\n", states[newstate]);
     }
-    printf("\n");
     main_state = newstate;
 }
 
@@ -435,7 +428,6 @@ static void fsm_run(void)
                 avg.pm2_5 = sum.pm2_5 / sum_num;
                 avg.pm10 = sum.pm10 / sum_num;
                 // take temperature/humidity sample
-                bme_meas_t bme = {0.0, 0.0, 0.0};
                 if (bmeFound) {
                     bme.temperature = bme280.readTempC();
                     bme.humidity = bme280.readFloatHumidity();
@@ -443,8 +435,18 @@ static void fsm_run(void)
                 }
                 // show averaged particulate matter and send it
                 screen_format_dust(&avg);
-                send_dust(&avg, &bme, bmeFound);
+                time_send = random(TIME_SEND);
+                printf("Sending in %d seconds...\n", time_send);
+                set_fsm_state(E_SEND);
+            } else {
+                set_fsm_state(E_IDLE);
             }
+        }
+        break;
+
+    case E_SEND:
+        if (sec > (TIME_WARMUP + TIME_MEASURE + time_send)) {
+            send_dust(&avg, &bme, bmeFound);
             set_fsm_state(E_IDLE);
         }
         break;
