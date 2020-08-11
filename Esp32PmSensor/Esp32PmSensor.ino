@@ -445,7 +445,7 @@ static void fsm_run(void)
         break;
 
     case E_SEND:
-        if (sec > (TIME_WARMUP + TIME_MEASURE + time_send)) {
+        if (sec >= (TIME_WARMUP + TIME_MEASURE + time_send)) {
             send_dust(&avg, &bme, bmeFound);
             set_fsm_state(E_IDLE);
         }
