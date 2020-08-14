@@ -50,6 +50,8 @@ static const u1_t APPKEY[] = {
 #define TIME_MEASURE    10
 // max duration of send phase (seconds)
 #define TIME_SEND       30
+// reboot interval (milliseconds)
+#define REBOOT_INTERVAL 2592000000UL
 
 typedef struct {
     float humidity;
@@ -553,4 +555,12 @@ void loop(void)
 
     // run LoRa process
     os_runloop_once();
+
+    // reboot every 30 days
+    if (ms > REBOOT_INTERVAL) {
+        printf("Reboot ...\n");
+        ESP.restart();
+        while (true);
+    }
 }
+
