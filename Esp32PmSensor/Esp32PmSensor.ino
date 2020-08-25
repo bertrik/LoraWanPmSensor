@@ -51,7 +51,9 @@ static const u1_t APPKEY[] = {
 // max duration of send phase (seconds)
 #define TIME_SEND       30
 // reboot interval (milliseconds)
-#define REBOOT_INTERVAL 2592000000UL
+#define REBOOT_INTERVAL 2592000UL
+// time to keep display on
+#define TIME_OLED_ENABLED   1800
 
 typedef struct {
     float humidity;
@@ -60,6 +62,7 @@ typedef struct {
 } bme_meas_t;
 
 typedef struct {
+    bool enabled;
     bool update;
     // 1st line: LoRa address
     char loraDevEui[32];
@@ -293,7 +296,7 @@ static void send_dust(sds_meas_t * meas, bme_meas_t * bme, bool bmeValid)
     }
 }
 
-static void screen_update(void)
+static void screen_update(unsigned long int second)
 {
     if (screen.update) {
         display.clear();
@@ -314,6 +317,10 @@ static void screen_update(void)
 
         display.display();
         screen.update = false;
+    }
+    if (screen.enabled && (second > TIME_OLED_ENABLED)) {
+        display.displayOff();
+        screen.enabled = false;
     }
 }
 
@@ -346,13 +353,13 @@ static void set_fsm_state(fsm_state_t newstate)
     main_state = newstate;
 }
 
-static void fsm_run(void)
+static void fsm_run(unsigned long int seconds)
 {
     static sds_meas_t sum;
     static int sum_num = 0;
     sds_meas_t sds_meas;
 
-    int sec = (millis() / 1000) % TIME_CYCLE;
+    unsigned long int sec = seconds % TIME_CYCLE;
 
     switch (main_state) {
     case E_INIT:
@@ -503,6 +510,7 @@ void setup(void)
     display.flipScreenVertically();
     display.setFont(ArialMT_Plain_10);
     display.setTextAlignment(TEXT_ALIGN_LEFT);
+    screen.enabled = true;
 
     // initialize the SDS011 serial
     sdsSerial.begin(9600, SERIAL_8N1, PIN_SDS_RX, PIN_SDS_TX, false);
@@ -533,10 +541,10 @@ void setup(void)
 
 void loop(void)
 {
-    static unsigned long button_ts = 0;
+    unsigned long ms = millis();
 
     // check for long button press to restart OTAA
-    unsigned long ms = millis();
+    static unsigned long button_ts = 0;
     if (digitalRead(PIN_BUTTON) == 0) {
         if ((ms - button_ts) > 2000) {
             LMIC_reset();
@@ -548,16 +556,17 @@ void loop(void)
     }
 
     // run the measurement state machine
-    fsm_run();
+    unsigned long second = ms / 1000UL;
+    fsm_run(second);
 
     // update screen
-    screen_update();
+    screen_update(second);
 
     // run LoRa process
     os_runloop_once();
 
     // reboot every 30 days
-    if (ms > REBOOT_INTERVAL) {
+    if (second > REBOOT_INTERVAL) {
         printf("Reboot ...\n");
         ESP.restart();
         while (true);
