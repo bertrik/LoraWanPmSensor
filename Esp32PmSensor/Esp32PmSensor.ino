@@ -52,8 +52,8 @@ static const u1_t APPKEY[] = {
 #define TIME_SEND       30
 // reboot interval (seconds)
 #define REBOOT_INTERVAL 2592000UL
-// time to keep display on
-#define TIME_OLED_ENABLED   1800
+// time to keep display on (seconds)
+#define TIME_OLED_ENABLED   600
 
 typedef struct {
     float humidity;
@@ -101,6 +101,7 @@ static char sdsVersion[8] = "FAIL!";
 static SDS011 sds;
 static screen_t screen;
 static int time_send;
+static unsigned long screen_last_enabled = 0;
 
 // average dust measument
 static sds_meas_t avg;
@@ -317,7 +318,7 @@ static void screen_update(unsigned long int second)
         display.display();
         screen.update = false;
     }
-    if (screen.enabled && (second > TIME_OLED_ENABLED)) {
+    if (screen.enabled && ((second - screen_last_enabled) > TIME_OLED_ENABLED)) {
         display.displayOff();
         screen.enabled = false;
     }
@@ -541,21 +542,18 @@ void setup(void)
 void loop(void)
 {
     unsigned long ms = millis();
+    unsigned long second = ms / 1000UL;
 
     // check for long button press to restart OTAA
-    static unsigned long button_ts = 0;
     if (digitalRead(PIN_BUTTON) == 0) {
-        if ((ms - button_ts) > 2000) {
-            LMIC_reset();
-            LMIC_startJoining();
-            button_ts = ms;
+        if (!screen.enabled) {
+            display.displayOn();
+            screen_last_enabled = second;
+            screen.enabled = true;
         }
-    } else {
-        button_ts = ms;
     }
 
     // run the measurement state machine
-    unsigned long second = ms / 1000UL;
     fsm_run(second);
 
     // update screen
