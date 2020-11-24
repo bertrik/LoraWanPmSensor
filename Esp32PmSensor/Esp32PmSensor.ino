@@ -244,10 +244,9 @@ static bool sds_fan(bool on)
 
 static void send_dust(sds_meas_t * meas, bme_meas_t * bme, bool bmeValid)
 {
-    uint8_t buf[20];
-
     if ((LMIC.opmode & (OP_TXDATA | OP_TXRXPEND)) == 0) {
         // encode it as Cayenne
+        uint8_t buf[20];
         int idx = 0;
 
         // PM10
@@ -346,8 +345,8 @@ static void screen_format_version(const char *sdsVersion, const char *bmeVersion
 
 static void set_fsm_state(fsm_state_t newstate)
 {
-    static const char* states[] = { "E_INIT", "E_IDLE", "E_WARMUP", "E_MEASURE", "E_SEND" };
-    if (newstate <= E_LAST) {
+    if (newstate < E_LAST) {
+        static const char* states[] = { "E_INIT", "E_IDLE", "E_WARMUP", "E_MEASURE", "E_SEND" };
         printf(">>> %s\n", states[newstate]);
     }
     main_state = newstate;
