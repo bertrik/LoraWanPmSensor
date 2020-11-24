@@ -50,7 +50,7 @@ static const u1_t APPKEY[] = {
 #define TIME_MEASURE    10
 // max duration of send phase (seconds)
 #define TIME_SEND       30
-// reboot interval (milliseconds)
+// reboot interval (seconds)
 #define REBOOT_INTERVAL 2592000UL
 // time to keep display on
 #define TIME_OLED_ENABLED   1800
