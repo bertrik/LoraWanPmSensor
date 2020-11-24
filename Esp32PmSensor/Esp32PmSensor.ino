@@ -544,7 +544,7 @@ void loop(void)
     unsigned long ms = millis();
     unsigned long second = ms / 1000UL;
 
-    // check for long button press to restart OTAA
+    // button press re-enabled the display
     if (digitalRead(PIN_BUTTON) == 0) {
         if (!screen.enabled) {
             display.displayOn();
