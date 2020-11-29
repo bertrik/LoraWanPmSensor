@@ -17,6 +17,12 @@
 #include "soc/efuse_reg.h"
 #include "HardwareSerial.h"
 
+// OTA
+#include <WiFi.h>
+#include <ESPmDNS.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
+
 #include "sds011.h"
 
 // This EUI must be in BIG-ENDIAN format, most-significant byte (MSB).
@@ -537,6 +543,13 @@ void setup(void)
 
     // fan on, this makes the SDS011 respond to version commands
     sds_fan(true);
+
+    // OTA init
+    char ssid[32];
+    sprintf(ssid, "ESP32-%08X%08X", (uint32_t)(chipid >> 32), (uint32_t)chipid);
+    WiFi.softAP(ssid);
+    ArduinoOTA.setHostname("esp32-pmsensor");
+    ArduinoOTA.begin();
 }
 
 void loop(void)
@@ -568,5 +581,8 @@ void loop(void)
         ESP.restart();
         while (true);
     }
+
+    // run the OTA process
+    ArduinoOTA.handle();
 }
 
