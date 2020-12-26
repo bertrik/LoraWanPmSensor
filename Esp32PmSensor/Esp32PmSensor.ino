@@ -111,8 +111,6 @@ const lmic_pinmap lmic_pins = *Arduino_LMIC::GetPinmap_ThisBoard();
 
 static fsm_state_t main_state;
 
-// stored in "little endian" format
-static uint8_t deveui[8];
 static SSD1306 display(OLED_I2C_ADDR, PIN_OLED_SDA, PIN_OLED_SCL);
 static BME280 bme280;
 static bool bmeFound = false;
@@ -162,11 +160,29 @@ static void otaa_save(const uint8_t deveui[8], const uint8_t appeui[8], const ui
     EEPROM.commit();
 }
 
+// restores OTAA parameters from EEPROM, returns false if there are none
 static bool otaa_restore(void)
 {
     EEPROM.get(0, nvdata);
-    printf("nvdata magic = %s\n", nvdata.magic);
     return strcmp(nvdata.magic, NVDATA_MAGIC) == 0;
+}
+
+// sets OTAA to defaults
+static void otaa_defaults(void)
+{
+    uint64_t chipid = ESP.getEfuseMac();
+
+    // setup of unique ids
+    uint8_t deveui[8];
+    deveui[0] = (chipid >> 56) & 0xFF;
+    deveui[1] = (chipid >> 48) & 0xFF;
+    deveui[2] = (chipid >> 40) & 0xFF;
+    deveui[3] = (chipid >> 32) & 0xFF;
+    deveui[4] = (chipid >> 24) & 0xFF;
+    deveui[5] = (chipid >> 16) & 0xFF;
+    deveui[6] = (chipid >> 8) & 0xFF;
+    deveui[7] = (chipid >> 0) & 0xFF;
+    otaa_save(deveui, APPEUI, APPKEY);
 }
 
 static void setLoraStatus(const char *fmt, ...)
@@ -541,9 +557,66 @@ static int do_reboot(int argc, char *argv[])
     return CMD_OK;
 }
 
+static void printhex(const uint8_t * buf, int len)
+{
+    for (int i = 0; i < len; i++) {
+        printf("%02X", buf[i]);
+    }
+    printf("\n");
+}
+
+static void parsehex(const char *hex, uint8_t *buf, int len)
+{
+    char tmp[4];
+    for (int i = 0; i < len; i++) {
+        strncpy(tmp, hex, 2);
+        *buf++ = strtoul(tmp, NULL, 16);
+        hex += 2;
+    }
+}
+
+static int do_otaa(int argc, char *argv[])
+{
+    // reset OTAA
+    if ((argc == 2) && (strcmp(argv[1], "reset") == 0)) {
+        printf("Resetting OTAA to defaults\n");
+        otaa_defaults();
+    }
+
+    // save OTAA parameters
+    if (argc == 4) {
+        printf("Setting OTAA parameters\n");
+        char *deveui_hex = argv[1];
+        char *appeui_hex = argv[2];
+        char *appkey_hex = argv[3];
+        if ((strlen(deveui_hex) != 16) || (strlen(appeui_hex) != 16) || (strlen(appkey_hex) != 32)) {
+            return CMD_ARG;
+        }
+
+        uint8_t deveui[8];
+        uint8_t appeui[8];
+        uint8_t appkey[16];
+        parsehex(deveui_hex, deveui, 8);
+        parsehex(appeui_hex, appeui, 8);
+        parsehex(appkey_hex, appkey, 16);
+        otaa_save(deveui, appeui, appkey);
+    }
+
+    // show current OTAA parameters
+    printf("Dev EUI = ");
+    printhex(nvdata.deveui, 8);
+    printf("App EUI = ");
+    printhex(nvdata.appeui, 8);
+    printf("App key = ");
+    printhex(nvdata.appkey, 16);
+
+    return CMD_OK;
+}
+
 const cmd_t commands[] = {
     { "help", do_help, "Show help" },
     { "reboot", do_reboot, "Reboot ESP" },
+    { "otaa", do_otaa, "[reset|<[deveui] [appeui] [appkey]>] Query/reset/set OTAA parameters" },
     { NULL, NULL, NULL }
 };
 
@@ -587,20 +660,9 @@ void setup(void)
     sdsSerial.begin(9600, SERIAL_8N1, PIN_SDS_RX, PIN_SDS_TX, false);
 
     // restore LoRaWAN keys from EEPROM, or use a default
-    uint64_t chipid = ESP.getEfuseMac();
     EEPROM.begin(sizeof(nvdata));
     if (!otaa_restore()) {
-        // setup of unique ids
-        deveui[0] = (chipid >> 56) & 0xFF;
-        deveui[1] = (chipid >> 48) & 0xFF;
-        deveui[2] = (chipid >> 40) & 0xFF;
-        deveui[3] = (chipid >> 32) & 0xFF;
-        deveui[4] = (chipid >> 24) & 0xFF;
-        deveui[5] = (chipid >> 16) & 0xFF;
-        deveui[6] = (chipid >> 8) & 0xFF;
-        deveui[7] = (chipid >> 0) & 0xFF;
-        printf("Saving default TTN keys to EEPROM\n");
-        otaa_save(deveui, APPEUI, APPKEY);
+        otaa_defaults();
     }
     snprintf(screen.loraDevEui, sizeof(screen.loraDevEui),
              "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X", nvdata.deveui[0], nvdata.deveui[1], nvdata.deveui[2],
@@ -616,6 +678,7 @@ void setup(void)
     sds_fan(true);
 
     // OTA init
+    uint64_t chipid = ESP.getEfuseMac();
     char ssid[32];
     sprintf(ssid, "ESP32-%08X%08X", (uint32_t)(chipid >> 32), (uint32_t)chipid);
     WiFi.softAP(ssid);
