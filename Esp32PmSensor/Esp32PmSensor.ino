@@ -25,6 +25,8 @@
 #include <ArduinoOTA.h>
 
 #include "sds011.h"
+#include "editline.h"
+#include "cmdproc.h"
 
 // This EUI must be in BIG-ENDIAN format, most-significant byte (MSB).
 // For TTN issued EUIs the first bytes should be 0x70, 0xB3, 0xD5.
@@ -34,6 +36,8 @@ static const uint8_t APPEUI[8] = { 0x70, 0xB3, 0xD5, 0x7E, 0xD0, 0x01, 0xA0, 0x9
 static const uint8_t APPKEY[] = {
     0xAA, 0x9F, 0x12, 0x45, 0x7F, 0x06, 0x64, 0xDF, 0x4C, 0x1E, 0x9F, 0xC9, 0x5E, 0xDA, 0x1A, 0x8A
 };
+
+#define printf Serial.printf
 
 #define OLED_I2C_ADDR 0x3C
 
@@ -121,6 +125,7 @@ static screen_t screen;
 static int time_send;
 static unsigned long screen_last_enabled = 0;
 static nvdata_t nvdata;
+static char cmdline[100];
 
 // average dust measument
 static sds_meas_t avg;
@@ -402,19 +407,19 @@ static void fsm_run(unsigned long int seconds)
     case E_INIT:
         // send command to get software version
         if (!bmeFound) {
-            Serial.printf("Detecting BME280 ...\n");
+            printf("Detecting BME280 ...\n");
             bmeFound = findBME280(bmeVersion);
             if (bmeFound) {
-                Serial.printf("Found BME280, i2c=%s\n", bmeVersion);
+                printf("Found BME280, i2c=%s\n", bmeVersion);
             }
             screen_format_version(sdsVersion, bmeVersion);
         }
         if (!sdsFound) {
             char sdsDate[16];
-            Serial.printf("Detecting SDS011 ...\n");
+            printf("Detecting SDS011 ...\n");
             sdsFound = sds_version(sdsVersion, sdsDate);
             if (sdsFound) {
-                Serial.printf("Found SDS011, serial=%s, date=%s\n", sdsVersion, sdsDate);
+                printf("Found SDS011, serial=%s, date=%s\n", sdsVersion, sdsDate);
             }
             screen_format_version(sdsVersion, bmeVersion);
         }
@@ -521,10 +526,39 @@ static bool findBME280(char *version)
     return false;
 }
 
+static void show_help(const cmd_t * cmds)
+{
+    for (const cmd_t * cmd = cmds; cmd->cmd != NULL; cmd++) {
+        printf("%10s: %s\n", cmd->name, cmd->help);
+    }
+}
+
+static int do_help(int argc, char *argv[]);
+
+static int do_reboot(int argc, char *argv[])
+{
+    ESP.restart();
+    return CMD_OK;
+}
+
+const cmd_t commands[] = {
+    { "help", do_help, "Show help" },
+    { "reboot", do_reboot, "Reboot ESP" },
+    { NULL, NULL, NULL }
+};
+
+static int do_help(int argc, char *argv[])
+{
+    show_help(commands);
+    return CMD_OK;
+}
+
 void setup(void)
 {
     Serial.begin(115200);
     Serial.println("Starting...");
+
+    EditInit(cmdline, sizeof(cmdline));
 
     // VEXT config: 0 = enable Vext
     pinMode(PIN_VEXT, OUTPUT);
@@ -593,6 +627,34 @@ void loop(void)
 {
     unsigned long ms = millis();
     unsigned long second = ms / 1000UL;
+
+    // parse command line
+    if (Serial.available()) {
+        char c;
+        bool haveLine = EditLine(Serial.read(), &c);
+        Serial.write(c);
+        if (haveLine) {
+            int result = cmd_process(commands, cmdline);
+            switch (result) {
+            case CMD_OK:
+                printf("OK\n");
+                break;
+            case CMD_NO_CMD:
+                break;
+            case CMD_ARG:
+                printf("Invalid arguments\n");
+                break;
+            case CMD_UNKNOWN:
+                printf("Unknown command, available commands:\n");
+                show_help(commands);
+                break;
+            default:
+                printf("%d\n", result);
+                break;
+            }
+            printf(">");
+        }
+    }
 
     // button press re-enabled the display
     if (digitalRead(PIN_BUTTON) == 0) {
