@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <Arduino.h>
+#include <EEPROM.h>
 #include "lmic.h"
 #include <hal/hal.h>
 #include "arduino_lmic_hal_boards.h"
@@ -27,10 +28,10 @@
 
 // This EUI must be in BIG-ENDIAN format, most-significant byte (MSB).
 // For TTN issued EUIs the first bytes should be 0x70, 0xB3, 0xD5.
-static const u1_t APPEUI[8] = { 0x70, 0xB3, 0xD5, 0x7E, 0xD0, 0x01, 0xA0, 0x9B };
+static const uint8_t APPEUI[8] = { 0x70, 0xB3, 0xD5, 0x7E, 0xD0, 0x01, 0xA0, 0x9B };
 
 // This key should be in big endian format as well, see above.
-static const u1_t APPKEY[] = {
+static const uint8_t APPKEY[] = {
     0xAA, 0x9F, 0x12, 0x45, 0x7F, 0x06, 0x64, 0xDF, 0x4C, 0x1E, 0x9F, 0xC9, 0x5E, 0xDA, 0x1A, 0x8A
 };
 
@@ -60,6 +61,17 @@ static const u1_t APPKEY[] = {
 #define REBOOT_INTERVAL 2592000UL
 // time to keep display on (seconds)
 #define TIME_OLED_ENABLED   600
+
+// how we know the non-volatile storage contains meaningful data
+#define NVDATA_MAGIC    "magic"
+
+// structure of non-volatile data
+typedef struct {
+    uint8_t deveui[8];
+    uint8_t appeui[8];
+    uint8_t appkey[16];
+    char magic[8];
+} nvdata_t;
 
 typedef struct {
     float humidity;
@@ -108,6 +120,7 @@ static SDS011 sds;
 static screen_t screen;
 static int time_send;
 static unsigned long screen_last_enabled = 0;
+static nvdata_t nvdata;
 
 // average dust measument
 static sds_meas_t avg;
@@ -117,20 +130,38 @@ static bme_meas_t bme;
 void os_getDevEui(u1_t * buf)
 {
     for (int i = 0; i < 8; i++) {
-        buf[i] = deveui[7 - i];
+        buf[i] = nvdata.deveui[7 - i];
     }
 }
 
 void os_getArtEui(u1_t * buf)
 {
     for (int i = 0; i < 8; i++) {
-        buf[i] = APPEUI[7 - i];
+        buf[i] = nvdata.appeui[7 - i];
     }
 }
 
 void os_getDevKey(u1_t * buf)
 {
-    memcpy(buf, APPKEY, 16);
+    memcpy(buf, nvdata.appkey, 16);
+}
+
+// saves OTAA keys to EEPROM
+static void otaa_save(const uint8_t deveui[8], const uint8_t appeui[8], const uint8_t appkey[16])
+{
+    memcpy(&nvdata.deveui, deveui, 8);
+    memcpy(&nvdata.appeui, appeui, 8);
+    memcpy(&nvdata.appkey, appkey, 16);
+    strcpy(nvdata.magic, NVDATA_MAGIC);
+    EEPROM.put(0, nvdata);
+    EEPROM.commit();
+}
+
+static bool otaa_restore(void)
+{
+    EEPROM.get(0, nvdata);
+    printf("nvdata magic = %s\n", nvdata.magic);
+    return strcmp(nvdata.magic, NVDATA_MAGIC) == 0;
 }
 
 static void setLoraStatus(const char *fmt, ...)
@@ -521,19 +552,25 @@ void setup(void)
     // initialize the SDS011 serial
     sdsSerial.begin(9600, SERIAL_8N1, PIN_SDS_RX, PIN_SDS_TX, false);
 
-    // setup of unique ids
+    // restore LoRaWAN keys from EEPROM, or use a default
     uint64_t chipid = ESP.getEfuseMac();
-    deveui[0] = (chipid >> 56) & 0xFF;
-    deveui[1] = (chipid >> 48) & 0xFF;
-    deveui[2] = (chipid >> 40) & 0xFF;
-    deveui[3] = (chipid >> 32) & 0xFF;
-    deveui[4] = (chipid >> 24) & 0xFF;
-    deveui[5] = (chipid >> 16) & 0xFF;
-    deveui[6] = (chipid >> 8) & 0xFF;
-    deveui[7] = (chipid >> 0) & 0xFF;
+    EEPROM.begin(sizeof(nvdata));
+    if (!otaa_restore()) {
+        // setup of unique ids
+        deveui[0] = (chipid >> 56) & 0xFF;
+        deveui[1] = (chipid >> 48) & 0xFF;
+        deveui[2] = (chipid >> 40) & 0xFF;
+        deveui[3] = (chipid >> 32) & 0xFF;
+        deveui[4] = (chipid >> 24) & 0xFF;
+        deveui[5] = (chipid >> 16) & 0xFF;
+        deveui[6] = (chipid >> 8) & 0xFF;
+        deveui[7] = (chipid >> 0) & 0xFF;
+        printf("Saving default TTN keys to EEPROM\n");
+        otaa_save(deveui, APPEUI, APPKEY);
+    }
     snprintf(screen.loraDevEui, sizeof(screen.loraDevEui),
-             "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X", deveui[0], deveui[1], deveui[2], deveui[3],
-             deveui[4], deveui[5], deveui[6], deveui[7]);
+             "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X", nvdata.deveui[0], nvdata.deveui[1], nvdata.deveui[2],
+             nvdata.deveui[3], nvdata.deveui[4], nvdata.deveui[5], nvdata.deveui[6], nvdata.deveui[7]);
 
     // LMIC init
     os_init();
