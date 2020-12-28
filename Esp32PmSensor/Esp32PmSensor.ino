@@ -52,7 +52,7 @@ static const uint8_t APPKEY[] = {
 #define UG_PER_M3       "\u00B5g/m\u00B3"
 
 // total measurement cycle time (seconds)
-#define TIME_CYCLE      270
+#define TIME_CYCLE      300
 // time to show version info
 #define TIME_VERSION    5
 // duration of warmup (seconds)
@@ -108,6 +108,17 @@ typedef enum {
 
 // Pin mapping
 const lmic_pinmap lmic_pins = *Arduino_LMIC::GetPinmap_ThisBoard();
+
+// each measurement cycle takes 5 minutes, this table specifies how many cycles there are per transmission
+static const int interval_table[] = {
+    1,  // SF6
+    1,  // SF7
+    1,  // SF8
+    2,  // SF9
+    4,  // SF10
+    8,  // SF11
+    16  // SF12
+};
 
 static fsm_state_t main_state;
 
@@ -415,6 +426,7 @@ static void fsm_run(unsigned long int seconds)
 {
     static sds_meas_t sum;
     static int sum_num = 0;
+    static int cycle = 0;
     sds_meas_t sds_meas;
 
     unsigned long int sec = seconds % TIME_CYCLE;
@@ -513,7 +525,14 @@ static void fsm_run(unsigned long int seconds)
 
     case E_SEND:
         if (sec >= (TIME_WARMUP + TIME_MEASURE + time_send)) {
-            send_dust(&avg, &bme, bmeFound);
+            // send data with an interval depending on the current spreading factor
+            int sf = getSf(LMIC.rps);
+            int interval = interval_table[sf];
+            printf("SF %d, cycle %d / interval %d\n", sf + 6, cycle, interval);
+            if ((cycle % interval) == 0) {
+                send_dust(&avg, &bme, bmeFound);
+            }
+            cycle++;
             set_fsm_state(E_IDLE);
         }
         break;
