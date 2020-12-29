@@ -59,8 +59,6 @@ static const uint8_t APPKEY[] = {
 #define TIME_WARMUP     20
 // duration of measurement (seconds)
 #define TIME_MEASURE    10
-// max duration of send phase (seconds)
-#define TIME_SEND       30
 // reboot interval (seconds)
 #define REBOOT_INTERVAL 2592000UL
 // time to keep display on (seconds)
@@ -131,7 +129,6 @@ static bool sdsFound = false;
 static char sdsVersion[8] = "FAIL!";
 static SDS011 sds;
 static screen_t screen;
-static int time_send;
 static unsigned long screen_last_enabled = 0;
 static nvdata_t nvdata;
 static char cmdline[100];
@@ -516,8 +513,6 @@ static void fsm_run(unsigned long int seconds)
                 }
                 // show averaged particulate matter and send it
                 screen_format_dust(&avg);
-                time_send = random(TIME_SEND);
-                printf("Sending in %d seconds...\n", time_send);
                 set_fsm_state(E_SEND);
             } else {
                 set_fsm_state(E_IDLE);
@@ -526,7 +521,7 @@ static void fsm_run(unsigned long int seconds)
         break;
 
     case E_SEND:
-        if (sec >= (TIME_WARMUP + TIME_MEASURE + time_send)) {
+        if (sec >= (TIME_WARMUP + TIME_MEASURE)) {
             // send data with an interval depending on the current spreading factor
             int sf = getSf(last_tx_rps);
             int interval = interval_table[sf];
