@@ -135,6 +135,7 @@ static int time_send;
 static unsigned long screen_last_enabled = 0;
 static nvdata_t nvdata;
 static char cmdline[100];
+static rps_t last_tx_rps = 0;
 
 // average dust measument
 static sds_meas_t avg;
@@ -239,6 +240,7 @@ static void onEventCallback(void *user, ev_t ev)
         break;
     case EV_TXSTART:
         setLoraStatus("Transmit SF%d", getSf(LMIC.rps) + 6);
+        last_tx_rps = LMIC.rps;
         break;
     case EV_RXSTART:
         setLoraStatus("Receive SF%d", getSf(LMIC.rps) + 6);
@@ -526,7 +528,7 @@ static void fsm_run(unsigned long int seconds)
     case E_SEND:
         if (sec >= (TIME_WARMUP + TIME_MEASURE + time_send)) {
             // send data with an interval depending on the current spreading factor
-            int sf = getSf(LMIC.rps);
+            int sf = getSf(last_tx_rps);
             int interval = interval_table[sf];
             printf("SF %d, cycle %d / interval %d\n", sf + 6, cycle, interval);
             if ((cycle % interval) == 0) {
