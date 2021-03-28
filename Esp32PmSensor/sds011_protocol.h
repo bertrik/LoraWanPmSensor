@@ -1,3 +1,6 @@
+#ifndef SDS011_PROTOCOL_H
+#define SDS011_PROTOCOL_H
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -17,12 +20,6 @@ typedef enum {
     TAIL
 } EState;
 
-typedef struct {
-    float pm2_5;
-    float pm10;
-    uint16_t id;
-} sds_meas_t;
-
 class SDS011Protocol {
 
 private:
@@ -37,12 +34,6 @@ public:
     SDS011Protocol();
 
     bool process(uint8_t b, uint8_t rsp_id);
-
-    /**
-     * Parses the received data into a sds_meas_t structure.
-     * @param meas the measurement structure
-     */
-    void getMeasurement(sds_meas_t *measurement);
 
     /**
      * Creates a command byte array from command data.
@@ -64,4 +55,5 @@ public:
 
 };
 
+#endif /* SDS011_PROTOCOL_H */
 

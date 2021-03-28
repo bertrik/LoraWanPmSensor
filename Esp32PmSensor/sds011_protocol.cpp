@@ -75,33 +75,6 @@ bool SDS011Protocol::process(uint8_t b, uint8_t rsp_id)
     return false;
 }
 
-static uint16_t get_le(const uint8_t *buf, int idx)
-{
-    uint16_t word;
-    word = buf[idx++];
-    word += buf[idx++] << 8;
-    return word;
-}
-
-static uint16_t get_be(const uint8_t *buf, int idx)
-{
-    uint16_t word;
-    word = buf[idx++];
-    word = (word << 8) | buf[idx++];
-    return word;
-}
-
-/**
-    Parses a complete measurement data frame into a structure.
-    @param[out] meas the parsed measurement data
- */
-void SDS011Protocol::getMeasurement(sds_meas_t *measurement)
-{
-    measurement->pm2_5 = get_le(_buf, 0) / 10.0;
-    measurement->pm10 = get_le(_buf, 2) / 10.0;
-    measurement->id = get_be(_buf, 4);
-}
-
 /**
     Creates a command buffer to send.
     @param[out] buf the command buffer

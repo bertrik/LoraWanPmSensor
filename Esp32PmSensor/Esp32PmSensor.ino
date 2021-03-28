@@ -24,7 +24,7 @@
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 
-#include "sds011_protocol.h"
+#include "sds011.h"
 #include "editline.h"
 #include "cmdproc.h"
 
@@ -125,9 +125,9 @@ static BME280 bme280;
 static bool bmeFound = false;
 static char bmeVersion[8] = "FAIL!";
 static HardwareSerial sdsSerial(1);
+static SDS011 sds(&sdsSerial);
 static bool sdsFound = false;
 static char sdsVersion[8] = "FAIL!";
-static SDS011Protocol sds;
 static screen_t screen;
 static unsigned long screen_last_enabled = 0;
 static nvdata_t nvdata;
@@ -250,65 +250,6 @@ static void onEventCallback(void *user, ev_t ev)
         Serial.println((unsigned) ev);
         break;
     }
-}
-
-static int sds_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int rsp_size, int timeout)
-{
-    uint8_t data[19];
-    int rsp_len;
-
-    // send cmd
-    int len = sds.createCommand(data, sizeof(data), cmd, cmd_len);
-    sdsSerial.write(data, len);
-
-    // wait for response
-    unsigned long start = millis();
-    while ((millis() - start) < timeout) {
-        if (sdsSerial.available()) {
-            char c = sdsSerial.read();
-            if (sds.process(c, 0xC5)) {
-                rsp_len = sds.getBuffer(rsp, rsp_size);
-                return rsp_len;
-            }
-        }
-        yield();
-    }
-    return 0;
-}
-
-static bool sds_version(char *serial, char *date)
-{
-    uint8_t cmd = 7;
-    uint8_t rsp[10];
-    int rsp_len = sds_exchange(&cmd, 1, rsp, sizeof(rsp), 1000);
-
-    // parse it, example response 07 12 0A 1E 3A B7 00 00 00 00
-    if ((rsp_len > 5) && (rsp[0] == 7)) {
-        int year = 2000 + rsp[1];
-        int month = rsp[2];
-        int day = rsp[3];
-        int id = (rsp[4] << 8) | rsp[5];
-        sprintf(serial, "%04X", id);
-        sprintf(date, "%4d-%2d-%2d", year, month, day);
-        return true;
-    }
-
-    return false;
-}
-
-static bool sds_fan(bool on)
-{
-    uint8_t cmd[3];
-    uint8_t rsp[10];
-
-    cmd[0] = 6;
-    cmd[1] = 1;
-    cmd[2] = on ? 1 : 0;
-    int rsp_len = sds_exchange(cmd, sizeof(cmd), rsp, sizeof(rsp), 1000);
-    if (rsp_len > 2) {
-        return rsp[2] == cmd[2];
-    }
-    return false;
 }
 
 static void send_dust(sds_meas_t * meas, bme_meas_t * bme, bool bmeValid)
@@ -444,7 +385,7 @@ static void fsm_run(unsigned long int seconds)
         if (!sdsFound) {
             char sdsDate[16];
             printf("Detecting SDS011 ...\n");
-            sdsFound = sds_version(sdsVersion, sdsDate);
+            sdsFound = sds.version(sdsVersion, sdsDate);
             if (sdsFound) {
                 printf("Found SDS011, serial=%s, date=%s\n", sdsVersion, sdsDate);
             }
@@ -458,7 +399,7 @@ static void fsm_run(unsigned long int seconds)
     case E_IDLE:
         if (sec < TIME_WARMUP) {
             // turn fan on
-            sds_fan(true);
+            sds.fan(true);
             set_fsm_state(E_WARMUP);
         }
         break;
@@ -466,12 +407,8 @@ static void fsm_run(unsigned long int seconds)
     case E_WARMUP:
         if (sec < TIME_WARMUP) {
             // read/show measurements while warming up
-            while (sdsSerial.available()) {
-                uint8_t c = sdsSerial.read();
-                if (sds.process(c, 0xC0)) {
-                    sds.getMeasurement(&sds_meas);
-                    screen_format_dust(&sds_meas);
-                }
+            if (sds.poll(&sds_meas)) {
+                screen_format_dust(&sds_meas);
             }
         } else {
             // reset sum
@@ -485,21 +422,16 @@ static void fsm_run(unsigned long int seconds)
     case E_MEASURE:
         if (sec < (TIME_WARMUP + TIME_MEASURE)) {
             // process measurement
-            while (sdsSerial.available()) {
-                uint8_t c = sdsSerial.read();
-                if (sds.process(c, 0xC0)) {
-                    // show individual measurement
-                    sds.getMeasurement(&sds_meas);
-                    screen_format_dust(&sds_meas);
-                    // average it
-                    sum.pm2_5 += sds_meas.pm2_5;
-                    sum.pm10 += sds_meas.pm10;
-                    sum_num++;
-                }
+            if (sds.poll(&sds_meas)) {
+                screen_format_dust(&sds_meas);
+                // aggregate it
+                sum.pm2_5 += sds_meas.pm2_5;
+                sum.pm10 += sds_meas.pm10;
+                sum_num++;
             }
         } else {
             // turn the fan off
-            sds_fan(false);
+            sds.fan(false);
 
             // calculate average particulate matter
             if (sum_num > 0) {
@@ -691,7 +623,7 @@ void setup(void)
     LMIC_startJoining();
 
     // fan on, this makes the SDS011 respond to version commands
-    sds_fan(true);
+    sds.fan(true);
 
     // OTA init
     uint64_t chipid = ESP.getEfuseMac();
