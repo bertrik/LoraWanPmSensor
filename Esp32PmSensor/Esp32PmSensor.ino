@@ -24,7 +24,7 @@
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 
-#include "sds011.h"
+#include "sds011_protocol.h"
 #include "editline.h"
 #include "cmdproc.h"
 
@@ -127,7 +127,7 @@ static char bmeVersion[8] = "FAIL!";
 static HardwareSerial sdsSerial(1);
 static bool sdsFound = false;
 static char sdsVersion[8] = "FAIL!";
-static SDS011 sds;
+static SDS011Protocol sds;
 static screen_t screen;
 static unsigned long screen_last_enabled = 0;
 static nvdata_t nvdata;

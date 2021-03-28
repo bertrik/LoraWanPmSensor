@@ -23,7 +23,7 @@ typedef struct {
     uint16_t id;
 } sds_meas_t;
 
-class SDS011 {
+class SDS011Protocol {
 
 private:
     EState  _state;
@@ -34,7 +34,7 @@ private:
     uint8_t _sum;
 
 public:
-    SDS011();
+    SDS011Protocol();
 
     bool process(uint8_t b, uint8_t rsp_id);
 

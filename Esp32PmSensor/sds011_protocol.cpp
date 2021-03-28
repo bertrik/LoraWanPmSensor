@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "sds011.h"
+#include "sds011_protocol.h"
 
 // magic header/footer bytes
 #define MAGIC1 0xAA
@@ -11,7 +11,7 @@
 /**
     Initializes the measurement data state machine.
  */
-SDS011::SDS011(void)
+SDS011Protocol::SDS011Protocol(void)
 {
     _state = HEAD;
     _size = sizeof(_buf);
@@ -25,7 +25,7 @@ SDS011::SDS011(void)
     @param[in] b the byte
     @return true if a full message was received
  */
-bool SDS011::process(uint8_t b, uint8_t rsp_id)
+bool SDS011Protocol::process(uint8_t b, uint8_t rsp_id)
 {
     switch (_state) {
     // wait for header byte
@@ -95,7 +95,7 @@ static uint16_t get_be(const uint8_t *buf, int idx)
     Parses a complete measurement data frame into a structure.
     @param[out] meas the parsed measurement data
  */
-void SDS011::getMeasurement(sds_meas_t *measurement)
+void SDS011Protocol::getMeasurement(sds_meas_t *measurement)
 {
     measurement->pm2_5 = get_le(_buf, 0) / 10.0;
     measurement->pm10 = get_le(_buf, 2) / 10.0;
@@ -110,7 +110,7 @@ void SDS011::getMeasurement(sds_meas_t *measurement)
     @param[in] cmd_data_len the length of the byte array
     @return the length of the command buffer, or 0 if no command could be constructed
 */
-int SDS011::createCommand(uint8_t *buf, int size, const uint8_t *cmd_data, int cmd_data_len)
+int SDS011Protocol::createCommand(uint8_t *buf, int size, const uint8_t *cmd_data, int cmd_data_len)
 {
     // verify arguments
     if (size < 19) {
@@ -138,7 +138,7 @@ int SDS011::createCommand(uint8_t *buf, int size, const uint8_t *cmd_data, int c
     return 19;
 }
 
-int SDS011::getBuffer(uint8_t *rsp, int rsp_size)
+int SDS011Protocol::getBuffer(uint8_t *rsp, int rsp_size)
 {
     int len = 10;
     if (len > rsp_size) {
