@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <math.h>
 
 #include <Arduino.h>
 #include <EEPROM.h>
@@ -25,8 +26,11 @@
 #include <ArduinoOTA.h>
 
 #include "sds011.h"
+#include "sps30.h"
+
 #include "editline.h"
 #include "cmdproc.h"
+#include "aggregator.h"
 
 // This EUI must be in BIG-ENDIAN format, most-significant byte (MSB).
 // For TTN issued EUIs the first bytes should be 0x70, 0xB3, 0xD5.
@@ -104,6 +108,23 @@ typedef enum {
     E_LAST
 } fsm_state_t;
 
+typedef enum {
+    E_ITEM_PM1_0,
+    E_ITEM_PM2_5,
+    E_ITEM_PM4_0,
+    E_ITEM_PM10,
+    E_ITEM_TEMPERATURE,
+    E_ITEM_HUMIDITY,
+    E_ITEM_PRESSURE,
+    E_ITEM_MAX
+} item_t;
+
+typedef enum {
+    E_PMSENSOR_NONE,
+    E_PMSENSOR_SDS011,
+    E_PMSENSOR_SPS30
+} pmsensor_t;
+
 // Pin mapping
 const lmic_pinmap lmic_pins = *Arduino_LMIC::GetPinmap_ThisBoard();
 
@@ -124,20 +145,22 @@ static SSD1306 display(OLED_I2C_ADDR, PIN_OLED_SDA, PIN_OLED_SCL);
 static BME280 bme280;
 static bool bmeFound = false;
 static char bmeVersion[8] = "FAIL!";
-static HardwareSerial sdsSerial(1);
-static SDS011 sds(&sdsSerial);
-static bool sdsFound = false;
+static HardwareSerial serial(1);
+
+static SDS011 sds(&serial, true);
+//static bool sdsFound = false;
 static char sdsVersion[8] = "FAIL!";
+
+static SPS30 sps(&serial);
+static pmsensor_t pmsensor = E_PMSENSOR_NONE;
+
 static screen_t screen;
 static unsigned long screen_last_enabled = 0;
 static nvdata_t nvdata;
 static char cmdline[100];
 static rps_t last_tx_rps = 0;
 
-// average dust measument
-static sds_meas_t avg;
-// bme measurement
-static bme_meas_t bme;
+static Aggregator aggregator(E_ITEM_MAX);
 
 void os_getDevEui(u1_t * buf)
 {
@@ -222,9 +245,6 @@ static void onEventCallback(void *user, ev_t ev)
     case EV_JOIN_FAILED:
         setLoraStatus("JOIN failed!");
         break;
-    case EV_REJOIN_FAILED:
-        setLoraStatus("REJOIN failed!");
-        break;
     case EV_TXCOMPLETE:
         if (LMIC.txrxFlags & TXRX_ACK)
             Serial.println("Received ack");
@@ -252,55 +272,69 @@ static void onEventCallback(void *user, ev_t ev)
     }
 }
 
-static void send_dust(sds_meas_t * meas, bme_meas_t * bme, bool bmeValid)
+static void printhex(const uint8_t * buf, int len)
+{
+    for (int i = 0; i < len; i++) {
+        printf("%02X", buf[i]);
+    }
+    printf("\n");
+}
+
+static void parsehex(const char *hex, uint8_t *buf, int len)
+{
+    char tmp[4];
+    for (int i = 0; i < len; i++) {
+        strncpy(tmp, hex, 2);
+        *buf++ = strtoul(tmp, NULL, 16);
+        hex += 2;
+    }
+}
+
+static void add_cayenne_16bit(uint8_t *buf, int &index, item_t item, int channel, int type, double unit)
+{
+    double value;
+    if (aggregator.get(item, value)) {
+        int intval = value / unit;
+        if (intval < 0) {
+            intval = 0;
+        } else if (intval > 32767) {
+            intval = 32767;
+        }
+        buf[index++] = channel;
+        buf[index++] = type;
+        buf[index++] = highByte(intval);
+        buf[index++] = lowByte(intval);
+    }
+}
+
+static void add_cayenne_8bit(uint8_t *buf, int &index, item_t item, int channel, int type,  double unit)
+{
+    double value;
+    if (aggregator.get(item, value)) {
+        int intval = value / unit;
+        buf[index++] = channel;
+        buf[index++] = type;
+        buf[index++] = lowByte(intval);
+    }
+}
+
+static void send_dust(void)
 {
     if ((LMIC.opmode & (OP_TXDATA | OP_TXRXPEND)) == 0) {
         // encode it as Cayenne
-        uint8_t buf[20];
+        uint8_t buf[32];
         int idx = 0;
+        add_cayenne_16bit(buf, idx, E_ITEM_PM1_0, 0, 2, 0.01);
+        add_cayenne_16bit(buf, idx, E_ITEM_PM10, 1, 2, 0.01);
+        add_cayenne_16bit(buf, idx, E_ITEM_PM2_5, 2, 2, 0.01);
+        add_cayenne_16bit(buf, idx, E_ITEM_PM4_0, 4, 2, 0.01);
+        add_cayenne_16bit(buf, idx, E_ITEM_TEMPERATURE, 0, 103, 0.1);
+        add_cayenne_8bit(buf, idx, E_ITEM_HUMIDITY, 0, 104, 0.5);
+        add_cayenne_16bit(buf, idx, E_ITEM_PRESSURE, 0, 115, 10.0);
 
-        // PM10
-        buf[idx++] = 1;
-        buf[idx++] = 2;
-        int pm10 = meas->pm10 / 0.01;
-        if (pm10 > 32767) {
-            pm10 = 32767;
-        }
-        buf[idx++] = highByte(pm10);
-        buf[idx++] = lowByte(pm10);
-
-        // PM2.5
-        buf[idx++] = 2;
-        buf[idx++] = 2;
-        int pm2_5 = meas->pm2_5 / 0.01;
-        if (pm2_5 > 32767) {
-            pm2_5 = 32767;
-        }
-        buf[idx++] = highByte(pm2_5);
-        buf[idx++] = lowByte(pm2_5);
-
-        if (bmeValid) {
-            // temperature
-            int tempInt = bme->temperature / 0.1;
-            buf[idx++] = 3;
-            buf[idx++] = 103;
-            buf[idx++] = highByte(tempInt);
-            buf[idx++] = lowByte(tempInt);
-
-            // humidity
-            int humiInt = bme->humidity / 0.5;
-            buf[idx++] = 4;
-            buf[idx++] = 104;
-            buf[idx++] = humiInt;
-
-            // pressure
-            int presInt = bme->pressure / 10.0;
-            buf[idx++] = 5;
-            buf[idx++] = 115;
-            buf[idx++] = highByte(presInt);
-            buf[idx++] = lowByte(presInt);
-        }
         // Prepare upstream data transmission at the next possible time.
+        printf("Sending:");
+        printhex(buf, idx);
         LMIC_setTxData2(1, buf, idx, 0);
     }
 }
@@ -333,23 +367,19 @@ static void screen_update(unsigned long int second)
     }
 }
 
-static void screen_format_dust(sds_meas_t * meas)
+static void screen_format_dust(void)
 {
-    char value[16];
+    char line[16];
+    double value;
 
-    snprintf(value, sizeof(value), "PM 10:%3d ", (int) round(meas->pm10));
-    screen.dust1 = String(value) + UG_PER_M3;
-
-    snprintf(value, sizeof(value), "PM2.5:%3d ", (int) round(meas->pm2_5));
-    screen.dust2 = String(value) + UG_PER_M3;
-
-    screen.update = true;
-}
-
-static void screen_format_version(const char *sdsVersion, const char *bmeVersion)
-{
-    screen.dust1 = String("SDS011: ") + sdsVersion;
-    screen.dust2 = String("BME280: ") + bmeVersion;
+    if (aggregator.get(E_ITEM_PM10, value)) {
+        snprintf(line, sizeof(line), "PM 10:%3d ", (int) round(value));
+        screen.dust1 = String(line) + UG_PER_M3;
+    }
+    if (aggregator.get(E_ITEM_PM2_5, value)) {
+        snprintf(line, sizeof(line), "PM2.5:%3d ", (int) round(value));
+        screen.dust2 = String(line) + UG_PER_M3;
+    }
     screen.update = true;
 }
 
@@ -362,36 +392,84 @@ static void set_fsm_state(fsm_state_t newstate)
     main_state = newstate;
 }
 
+static void pmsensor_on_off(boolean on)
+{
+    switch (pmsensor) {
+    case E_PMSENSOR_SDS011:
+        sds.fan(on);
+        break;
+    case E_PMSENSOR_SPS30:
+        if (on) {
+            sps.start();
+        } else {
+            sps.stop();
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+// return true if new measurement available
+static bool pmsensor_measure(void)
+{
+    sds_meas_t meas;
+    uint16_t pm1_0, pm2_5, pm4_0, pm10, ps;
+
+    switch (pmsensor) {
+    case E_PMSENSOR_SDS011:
+        if (sds.poll(&meas)) {
+            aggregator.add(E_ITEM_PM2_5, meas.pm2_5);
+            aggregator.add(E_ITEM_PM10, meas.pm10);
+            return true;
+        }
+        break;
+    case E_PMSENSOR_SPS30:
+        if (sps.read_measurement(&pm1_0, &pm2_5, &pm4_0, &pm10, &ps)) {
+            aggregator.add(E_ITEM_PM1_0, pm1_0);
+            aggregator.add(E_ITEM_PM2_5, pm2_5);
+            aggregator.add(E_ITEM_PM4_0, pm4_0);
+            aggregator.add(E_ITEM_PM10, pm10);
+            return true;
+        }
+        break;
+    default:
+        break;
+    }
+    return false;
+}
+
 static void fsm_run(unsigned long int seconds)
 {
-    static sds_meas_t sum;
-    static int sum_num = 0;
     static int cycle = 0;
-    sds_meas_t sds_meas;
 
     unsigned long int sec = seconds % TIME_CYCLE;
 
     switch (main_state) {
     case E_INIT:
-        // send command to get software version
-        if (!bmeFound) {
-            printf("Detecting BME280 ...\n");
-            bmeFound = findBME280(bmeVersion);
-            if (bmeFound) {
-                printf("Found BME280, i2c=%s\n", bmeVersion);
+        if (pmsensor == E_PMSENSOR_NONE) {
+            // detect SPS30
+            printf("Detecting SPS30 sensor ...\n");
+            serial.begin(115200, SERIAL_8N1, PIN_SDS_RX, PIN_SDS_TX);
+            if (sps.wakeup()) {
+                printf("Found SPS30\n");
+                pmsensor = E_PMSENSOR_SPS30;
+                screen.dust1 = String("SPS30: detected");
+                screen.update = true;
+                break;
             }
-            screen_format_version(sdsVersion, bmeVersion);
-        }
-        if (!sdsFound) {
+            // detect SDS011
             char sdsDate[16];
-            printf("Detecting SDS011 ...\n");
-            sdsFound = sds.version(sdsVersion, sdsDate);
-            if (sdsFound) {
+            printf("Detecting SDS011 sensor ...\n");
+            serial.begin(9600, SERIAL_8N1, PIN_SDS_RX, PIN_SDS_TX);
+            if (sds.version(sdsVersion, sdsDate) || sds.version(sdsVersion, sdsDate)) {
                 printf("Found SDS011, serial=%s, date=%s\n", sdsVersion, sdsDate);
+                pmsensor = E_PMSENSOR_SDS011;
+                screen.dust1 = String("SDS011:") + sdsVersion;
+                screen.update = true;
+                break;
             }
-            screen_format_version(sdsVersion, bmeVersion);
-        }
-        if (sdsFound && (sec > TIME_VERSION)) {
+        } else {
             set_fsm_state(E_IDLE);
         }
         break;
@@ -399,7 +477,8 @@ static void fsm_run(unsigned long int seconds)
     case E_IDLE:
         if (sec < TIME_WARMUP) {
             // turn fan on
-            sds.fan(true);
+            pmsensor_on_off(true);
+            aggregator.reset();
             set_fsm_state(E_WARMUP);
         }
         break;
@@ -407,48 +486,32 @@ static void fsm_run(unsigned long int seconds)
     case E_WARMUP:
         if (sec < TIME_WARMUP) {
             // read/show measurements while warming up
-            if (sds.poll(&sds_meas)) {
-                screen_format_dust(&sds_meas);
+            if (pmsensor_measure()) {
+                screen_format_dust();
             }
         } else {
             // reset sum
-            sum.pm2_5 = 0.0;
-            sum.pm10 = 0.0;
-            sum_num = 0;
+            aggregator.reset();
             set_fsm_state(E_MEASURE);
         }
         break;
 
     case E_MEASURE:
         if (sec < (TIME_WARMUP + TIME_MEASURE)) {
-            // process measurement
-            if (sds.poll(&sds_meas)) {
-                screen_format_dust(&sds_meas);
-                // aggregate it
-                sum.pm2_5 += sds_meas.pm2_5;
-                sum.pm10 += sds_meas.pm10;
-                sum_num++;
+            if (pmsensor_measure()) {
+                screen_format_dust();
             }
         } else {
             // turn the fan off
-            sds.fan(false);
+            pmsensor_on_off(false);
 
-            // calculate average particulate matter
-            if (sum_num > 0) {
-                avg.pm2_5 = sum.pm2_5 / sum_num;
-                avg.pm10 = sum.pm10 / sum_num;
-                // take temperature/humidity sample
-                if (bmeFound) {
-                    bme.temperature = bme280.readTempC();
-                    bme.humidity = bme280.readFloatHumidity();
-                    bme.pressure = bme280.readFloatPressure();
-                }
-                // show averaged particulate matter and send it
-                screen_format_dust(&avg);
-                set_fsm_state(E_SEND);
-            } else {
-                set_fsm_state(E_IDLE);
+            // take temperature/humidity sample
+            if (bmeFound) {
+                aggregator.add(E_ITEM_TEMPERATURE, bme280.readTempC());
+                aggregator.add(E_ITEM_HUMIDITY, bme280.readFloatHumidity());
+                aggregator.add(E_ITEM_PRESSURE, bme280.readFloatPressure());
             }
+            set_fsm_state(E_SEND);
         }
         break;
 
@@ -459,7 +522,7 @@ static void fsm_run(unsigned long int seconds)
             int interval = interval_table[sf];
             printf("SF %d, cycle %d / interval %d\n", sf + 6, cycle, interval);
             if ((cycle % interval) == 0) {
-                send_dust(&avg, &bme, bmeFound);
+                send_dust();
             }
             cycle++;
             set_fsm_state(E_IDLE);
@@ -503,24 +566,6 @@ static int do_reboot(int argc, char *argv[])
 {
     ESP.restart();
     return CMD_OK;
-}
-
-static void printhex(const uint8_t * buf, int len)
-{
-    for (int i = 0; i < len; i++) {
-        printf("%02X", buf[i]);
-    }
-    printf("\n");
-}
-
-static void parsehex(const char *hex, uint8_t *buf, int len)
-{
-    char tmp[4];
-    for (int i = 0; i < len; i++) {
-        strncpy(tmp, hex, 2);
-        *buf++ = strtoul(tmp, NULL, 16);
-        hex += 2;
-    }
 }
 
 static int do_otaa(int argc, char *argv[])
@@ -604,9 +649,6 @@ void setup(void)
     display.setTextAlignment(TEXT_ALIGN_LEFT);
     screen.enabled = true;
 
-    // initialize the SDS011 serial
-    sdsSerial.begin(9600, SERIAL_8N1, PIN_SDS_RX, PIN_SDS_TX, false);
-
     // restore LoRaWAN keys from EEPROM, or use a default
     EEPROM.begin(sizeof(nvdata));
     if (!otaa_restore()) {
@@ -621,6 +663,15 @@ void setup(void)
     LMIC_reset();
     LMIC_registerEventCb(onEventCallback, NULL);
     LMIC_startJoining();
+
+    // detect BME280
+    printf("Detecting BME280 ...\n");
+    bmeFound = findBME280(bmeVersion);
+    if (bmeFound) {
+        printf("Found BME280, i2c=%s\n", bmeVersion);
+        screen.dust2 = String("BME280:") + bmeVersion;
+        screen.update = true;
+    }
 
     // fan on, this makes the SDS011 respond to version commands
     sds.fan(true);

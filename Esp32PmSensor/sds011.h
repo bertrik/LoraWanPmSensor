@@ -15,11 +15,14 @@ class SDS011 {
 
 private:
     Stream *_serial;
+    bool _debug;
+
     SDS011Protocol _protocol;
     int _exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int rsp_size, int timeout);
+    void _printhex(const char *prefix, const uint8_t * buf, int len);
 
 public:
-    SDS011(Stream *serial);
+    explicit SDS011(Stream *serial, bool debug = false);
 
     bool version(char *serial, char *date);
     bool fan(bool on);

@@ -6,9 +6,21 @@
 #include "sds011_protocol.h"
 #include "sds011.h"
 
-SDS011::SDS011(Stream *serial)
+void SDS011::_printhex(const char *prefix, const uint8_t * buf, int len)
+{
+    if (_debug) {
+        printf(prefix);
+        for (int i = 0; i < len; i++) {
+            printf("%02X", buf[i]);
+        }
+        printf("\n");
+    }
+}
+
+SDS011::SDS011(Stream *serial, bool debug)
 {
     _serial = serial;
+    _debug = debug;
 }
 
 int SDS011::_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int rsp_size, int timeout)
@@ -18,6 +30,7 @@ int SDS011::_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int rsp_size, i
 
     // send cmd
     int len = _protocol.createCommand(data, sizeof(data), cmd, cmd_len);
+    _printhex("> ", data, len);
     _serial->write(data, len);
 
     // wait for response
@@ -27,11 +40,13 @@ int SDS011::_exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int rsp_size, i
             char c = _serial->read();
             if (_protocol.process(c, 0xC5)) {
                 rsp_len = _protocol.getBuffer(rsp, rsp_size);
+                _printhex("< ", rsp, rsp_len);
                 return rsp_len;
             }
         }
         yield();
     }
+    printf("\n");
     return 0;
 }
 
