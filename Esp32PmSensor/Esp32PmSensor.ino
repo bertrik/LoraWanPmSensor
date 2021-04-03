@@ -146,11 +146,7 @@ static BME280 bme280;
 static bool bmeFound = false;
 static char bmeVersion[8] = "FAIL!";
 static HardwareSerial serial(1);
-
-static SDS011 sds(&serial, true);
-//static bool sdsFound = false;
-static char sdsVersion[8] = "FAIL!";
-
+static SDS011 sds(&serial);
 static SPS30 sps(&serial);
 static pmsensor_t pmsensor = E_PMSENSOR_NONE;
 
@@ -458,6 +454,10 @@ static void fsm_run(unsigned long int seconds)
             serial.begin(9600, SERIAL_8N1, PIN_SDS_RX, PIN_SDS_TX);
             if (sds.fan(true) || sds.fan(true)) {
                 printf("Found SDS011\n");
+                char serial[16], date[16];
+                if (sds.version(serial, date)) {
+                    printf("SDS011: %s, %s\n", serial, date);
+                }
                 pmsensor = E_PMSENSOR_SDS011;
                 screen.dust1 = String("PM: SDS011");
                 screen.update = true;

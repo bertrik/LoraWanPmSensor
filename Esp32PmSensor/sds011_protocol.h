@@ -4,13 +4,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define CMD_SET_DATA_REPORTING_MODE 2
-#define CMD_QUERY_DATA              4
-#define CMD_SET_DEVICE_ID           5
-#define CMD_SET_SLEEP_AND_WORK      6
-#define CMD_CHECK_FIRMWARE_VERSION  7
-#define CMD_SET_WORKING_PERIOD      8
-
 // parsing state
 typedef enum {
     HEAD = 0,
@@ -33,25 +26,23 @@ private:
 public:
     SDS011Protocol();
 
-    bool process(uint8_t b, uint8_t rsp_id);
+    bool process_rx(uint8_t b, uint8_t rsp_id);
 
     /**
      * Creates a command byte array from command data.
      * @param buf the destination buffer
-     * @param size the size of the destination buffer
-     * @param cmd_data the command data to be copied
      * @param cmd_len the length of the command data
+     * @param cmd_data the command data to be copied
      * @return the actual size of the command byte array created
      */
-    int createCommand(uint8_t * buf, int size, const uint8_t * cmd_data, int cmd_data_len);
+    int build_tx(uint8_t *buf, uint8_t cmd, size_t cmd_len, const uint8_t *cmd_data);
 
     /**
-     * Retrieves response data from the internal response data buffer.
-     * @param rsp the response data buffer
-     * @param rsp_size the response data buffer size
+     * Copies response data.
+     * @param rsp the response data buffer, should be at least 6 bytes
      * @return the actual size of the response data buffer
      */
-    int getBuffer(uint8_t *rsp, int rsp_size);
+    size_t get_data(uint8_t *rsp);
 
 };
 

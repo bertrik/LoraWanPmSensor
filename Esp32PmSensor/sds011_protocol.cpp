@@ -25,7 +25,7 @@ SDS011Protocol::SDS011Protocol(void)
     @param[in] b the byte
     @return true if a full message was received
  */
-bool SDS011Protocol::process(uint8_t b, uint8_t rsp_id)
+bool SDS011Protocol::process_rx(uint8_t b, uint8_t rsp_id)
 {
     switch (_state) {
     // wait for header byte
@@ -61,7 +61,7 @@ bool SDS011Protocol::process(uint8_t b, uint8_t rsp_id)
             _state = TAIL;
         } else {
             _state = HEAD;
-            process(b, rsp_id);
+            process_rx(b, rsp_id);
         }
         break;
     // wait for tail byte
@@ -77,48 +77,38 @@ bool SDS011Protocol::process(uint8_t b, uint8_t rsp_id)
 
 /**
     Creates a command buffer to send.
-    @param[out] buf the command buffer
-    @param[in] size the size of the command buffer
+    @param[out] buf the command buffer, should be at least 19 bytes
+    @param[in] cmd the command code
+    @param[in] cmd_len the length of the byte array
     @param[in] cmd_data the command data byte array
-    @param[in] cmd_data_len the length of the byte array
     @return the length of the command buffer, or 0 if no command could be constructed
 */
-int SDS011Protocol::createCommand(uint8_t *buf, int size, const uint8_t *cmd_data, int cmd_data_len)
+int SDS011Protocol::build_tx(uint8_t *buf, uint8_t cmd, size_t cmd_len, const uint8_t *cmd_data)
 {
-    // verify arguments
-    if (size < 19) {
-        return 0;
-    }
-    if (cmd_data_len > 13) {
-        return 0;
-    }
+    int idx = 0;
 
-    // fill buffer
-    memset(buf, 0, size);
-    buf[0] = MAGIC1;
-    buf[1] = 0xB4;
-    memcpy(&buf[2], cmd_data, cmd_data_len);
-    buf[15] = 0xFF;
-    buf[16] = 0xFF;
+    buf[idx++] = MAGIC1;
+    buf[idx++] = 0xB4;
+    buf[idx++] = cmd;
+    for (int i = 0; i < 12; i++) {
+        buf[idx++] = (i < cmd_len) ? cmd_data[i] : 0;
+    }
+    buf[idx++] = 0xFF;
+    buf[idx++] = 0xFF;
 
     // calculate check
     uint8_t sum = 0;
     for (int i = 2; i < 17; i++) {
         sum += buf[i];
     }
-    buf[17] = sum;
-    buf[18] = MAGIC2;
-    return 19;
+    buf[idx++] = sum;
+    buf[idx++] = MAGIC2;
+    return idx;
 }
 
-int SDS011Protocol::getBuffer(uint8_t *rsp, int rsp_size)
+size_t SDS011Protocol::get_data(uint8_t *rsp)
 {
-    int len = 10;
-    if (len > rsp_size) {
-        len = rsp_size;
-    }
-
-    memcpy(rsp, &_buf, len);
-    return len;
+    memcpy(rsp, _buf, 6);
+    return 6;
 }
 

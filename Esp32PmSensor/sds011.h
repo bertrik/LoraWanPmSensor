@@ -16,9 +16,11 @@ class SDS011 {
 private:
     Stream *_serial;
     bool _debug;
+    uint8_t _cmd_buf[32];
+    uint8_t _rsp_buf[8];
 
     SDS011Protocol _protocol;
-    int _exchange(uint8_t * cmd, int cmd_len, uint8_t * rsp, int rsp_size, int timeout);
+    int _exchange(uint8_t cmd, size_t cmd_len, const uint8_t * cmd_data);
     void _printhex(const char *prefix, const uint8_t * buf, int len);
 
 public:
