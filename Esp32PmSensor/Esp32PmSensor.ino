@@ -41,6 +41,8 @@ static const uint8_t APPKEY[] = {
     0xAA, 0x9F, 0x12, 0x45, 0x7F, 0x06, 0x64, 0xDF, 0x4C, 0x1E, 0x9F, 0xC9, 0x5E, 0xDA, 0x1A, 0x8A
 };
 
+#define DEFAULT_WIFI_PASSWORD   "pmsensor"
+
 #define printf Serial.printf
 
 #define OLED_I2C_ADDR 0x3C
@@ -76,19 +78,16 @@ typedef struct {
     uint8_t deveui[8];
     uint8_t appeui[8];
     uint8_t appkey[16];
+    char wifipass[64];
     char magic[8];
 } nvdata_t;
 
 typedef struct {
     bool enabled;
     bool update;
-    // 1st line: LoRa address
     char loraDevEui[32];
-    // 2nd line: LoRa status
     char loraStatus[32];
-    // 3rd line: PM10
     String dust1;
-    // 4th line: PM2.5
     String dust2;
 } screen_t;
 
@@ -171,40 +170,39 @@ void os_getDevKey(u1_t * buf)
     memcpy(buf, nvdata.appkey, 16);
 }
 
-// saves OTAA keys to EEPROM
-static void otaa_save(const uint8_t deveui[8], const uint8_t appeui[8], const uint8_t appkey[16])
+// saves settings to EEPROM
+static void nvdata_save(void)
 {
-    memcpy(&nvdata.deveui, deveui, 8);
-    memcpy(&nvdata.appeui, appeui, 8);
-    memcpy(&nvdata.appkey, appkey, 16);
     strcpy(nvdata.magic, NVDATA_MAGIC);
     EEPROM.put(0, nvdata);
     EEPROM.commit();
 }
 
-// restores OTAA parameters from EEPROM, returns false if there are none
-static bool otaa_restore(void)
+// restores settings from EEPROM, restoring default is no valid settings were found 
+static void nvdata_load(void)
 {
     EEPROM.get(0, nvdata);
-    return strcmp(nvdata.magic, NVDATA_MAGIC) == 0;
-}
+    if (strcmp(nvdata.magic, NVDATA_MAGIC) != 0) {
+        memset(&nvdata, 0, sizeof(nvdata));
 
-// sets OTAA to defaults
-static void otaa_defaults(void)
-{
-    uint64_t chipid = ESP.getEfuseMac();
+        // default OTAA settings
+        uint64_t chipid = ESP.getEfuseMac();
+        nvdata.deveui[0] = (chipid >> 56) & 0xFF;
+        nvdata.deveui[1] = (chipid >> 48) & 0xFF;
+        nvdata.deveui[2] = (chipid >> 40) & 0xFF;
+        nvdata.deveui[3] = (chipid >> 32) & 0xFF;
+        nvdata.deveui[4] = (chipid >> 24) & 0xFF;
+        nvdata.deveui[5] = (chipid >> 16) & 0xFF;
+        nvdata.deveui[6] = (chipid >> 8) & 0xFF;
+        nvdata.deveui[7] = (chipid >> 0) & 0xFF;
+        memcpy(&nvdata.appeui, APPEUI, 8);
+        memcpy(&nvdata.appkey, APPKEY, 16);
 
-    // setup of unique ids
-    uint8_t deveui[8];
-    deveui[0] = (chipid >> 56) & 0xFF;
-    deveui[1] = (chipid >> 48) & 0xFF;
-    deveui[2] = (chipid >> 40) & 0xFF;
-    deveui[3] = (chipid >> 32) & 0xFF;
-    deveui[4] = (chipid >> 24) & 0xFF;
-    deveui[5] = (chipid >> 16) & 0xFF;
-    deveui[6] = (chipid >> 8) & 0xFF;
-    deveui[7] = (chipid >> 0) & 0xFF;
-    otaa_save(deveui, APPEUI, APPKEY);
+        // default WiFi settings
+        strcpy(nvdata.wifipass, DEFAULT_WIFI_PASSWORD);
+
+        nvdata_save();
+    }
 }
 
 static void setLoraStatus(const char *fmt, ...)
@@ -262,8 +260,9 @@ static void onEventCallback(void *user, ev_t ev)
     }
 }
 
-static void printhex(const uint8_t * buf, int len)
+static void printhex(const char *prefix, const uint8_t * buf, int len)
 {
+    printf(prefix);
     for (int i = 0; i < len; i++) {
         printf("%02X", buf[i]);
     }
@@ -272,9 +271,9 @@ static void printhex(const uint8_t * buf, int len)
 
 static void parsehex(const char *hex, uint8_t *buf, int len)
 {
-    char tmp[4];
+    char tmp[3];
     for (int i = 0; i < len; i++) {
-        strncpy(tmp, hex, 2);
+        strlcpy(tmp, hex, 3);
         *buf++ = strtoul(tmp, NULL, 16);
         hex += 2;
     }
@@ -323,8 +322,7 @@ static void send_dust(void)
         add_cayenne_16bit(buf, idx, E_ITEM_PRESSURE, 0, 115, 10.0);
 
         // Prepare upstream data transmission at the next possible time.
-        printf("Sending:");
-        printhex(buf, idx);
+        printhex("Sending: ", buf, idx);
         LMIC_setTxData2(1, buf, idx, 0);
     }
 }
@@ -561,7 +559,9 @@ static int do_otaa(int argc, char *argv[])
     // reset OTAA
     if ((argc == 2) && (strcmp(argv[1], "reset") == 0)) {
         printf("Resetting OTAA to defaults\n");
-        otaa_defaults();
+        memset(&nvdata, 0, sizeof(nvdata));
+        EEPROM.put(0, nvdata);
+        nvdata_load();
     }
 
     // save OTAA parameters
@@ -574,22 +574,16 @@ static int do_otaa(int argc, char *argv[])
             return CMD_ARG;
         }
 
-        uint8_t deveui[8];
-        uint8_t appeui[8];
-        uint8_t appkey[16];
-        parsehex(deveui_hex, deveui, 8);
-        parsehex(appeui_hex, appeui, 8);
-        parsehex(appkey_hex, appkey, 16);
-        otaa_save(deveui, appeui, appkey);
+        parsehex(deveui_hex, nvdata.deveui, 8);
+        parsehex(appeui_hex, nvdata.appeui, 8);
+        parsehex(appkey_hex, nvdata.appkey, 16);
+        nvdata_save();
     }
 
     // show current OTAA parameters
-    printf("Dev EUI = ");
-    printhex(nvdata.deveui, 8);
-    printf("App EUI = ");
-    printhex(nvdata.appeui, 8);
-    printf("App key = ");
-    printhex(nvdata.appkey, 16);
+    printhex("Dev EUI: ", nvdata.deveui, 8);
+    printhex("App EUI: ", nvdata.appeui, 8);
+    printhex("App key: ", nvdata.appkey, 16);
 
     return CMD_OK;
 }
@@ -637,11 +631,10 @@ void setup(void)
     display.setTextAlignment(TEXT_ALIGN_LEFT);
     screen.enabled = true;
 
-    // restore LoRaWAN keys from EEPROM, or use a default
+    // restore setting (LoRaWAN keys, etc) from EEPROM, or use a default
     EEPROM.begin(sizeof(nvdata));
-    if (!otaa_restore()) {
-        otaa_defaults();
-    }
+    nvdata_load();
+
     snprintf(screen.loraDevEui, sizeof(screen.loraDevEui),
              "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X", nvdata.deveui[0], nvdata.deveui[1], nvdata.deveui[2],
              nvdata.deveui[3], nvdata.deveui[4], nvdata.deveui[5], nvdata.deveui[6], nvdata.deveui[7]);
@@ -665,7 +658,8 @@ void setup(void)
     uint64_t chipid = ESP.getEfuseMac();
     char ssid[32];
     sprintf(ssid, "ESP32-%08X%08X", (uint32_t)(chipid >> 32), (uint32_t)chipid);
-    WiFi.softAP(ssid);
+    printf("Starting AP with SSID '%s', pass '%s'\n", ssid, nvdata.wifipass); 
+    WiFi.softAP(ssid, nvdata.wifipass);
     ArduinoOTA.setHostname("esp32-pmsensor");
     ArduinoOTA.begin();
 }
