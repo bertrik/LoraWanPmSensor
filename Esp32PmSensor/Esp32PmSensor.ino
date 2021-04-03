@@ -392,22 +392,17 @@ static void set_fsm_state(fsm_state_t newstate)
     main_state = newstate;
 }
 
-static void pmsensor_on_off(boolean on)
+static bool pmsensor_on_off(boolean on)
 {
     switch (pmsensor) {
     case E_PMSENSOR_SDS011:
-        sds.fan(on);
-        break;
+        return sds.fan(on);
     case E_PMSENSOR_SPS30:
-        if (on) {
-            sps.start();
-        } else {
-            sps.stop();
-        }
-        break;
+        return on ? sps.start() : sps.stop();
     default:
         break;
     }
+    return false;
 }
 
 // return true if new measurement available
@@ -671,9 +666,6 @@ void setup(void)
         screen.dust2 = String("BME280:") + bmeVersion;
         screen.update = true;
     }
-
-    // fan on, this makes the SDS011 respond to version commands
-    sds.fan(true);
 
     // OTA init
     uint64_t chipid = ESP.getEfuseMac();
