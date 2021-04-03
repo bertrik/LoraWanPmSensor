@@ -454,18 +454,17 @@ static void fsm_run(unsigned long int seconds)
             if (sps.wakeup()) {
                 printf("Found SPS30\n");
                 pmsensor = E_PMSENSOR_SPS30;
-                screen.dust1 = String("SPS30: detected");
+                screen.dust1 = String("PM: SPS30");
                 screen.update = true;
                 break;
             }
             // detect SDS011
-            char sdsDate[16];
             printf("Detecting SDS011 sensor ...\n");
             serial.begin(9600, SERIAL_8N1, PIN_SDS_RX, PIN_SDS_TX);
-            if (sds.version(sdsVersion, sdsDate) || sds.version(sdsVersion, sdsDate)) {
-                printf("Found SDS011, serial=%s, date=%s\n", sdsVersion, sdsDate);
+            if (sds.fan(true) || sds.fan(true)) {
+                printf("Found SDS011\n");
                 pmsensor = E_PMSENSOR_SDS011;
-                screen.dust1 = String("SDS011:") + sdsVersion;
+                screen.dust1 = String("PM: SDS011");
                 screen.update = true;
                 break;
             }
