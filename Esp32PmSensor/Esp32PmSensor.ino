@@ -80,12 +80,6 @@ typedef struct {
 } nvdata_t;
 
 typedef struct {
-    float humidity;
-    float temperature;
-    float pressure;
-} bme_meas_t;
-
-typedef struct {
     bool enabled;
     bool update;
     // 1st line: LoRa address
