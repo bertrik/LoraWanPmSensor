@@ -47,6 +47,7 @@ int SPS30::exchange(uint8_t cmd, size_t out_len)
                 return in_len;
             }
         }
+        yield();
     }
     return -1;
 }  
