@@ -9,6 +9,9 @@
 
 #include <Arduino.h>
 #include <EEPROM.h>
+#include <WebServer.h>
+#include <ElegantOTA.h>
+
 #include "lmic.h"
 #include <hal/hal.h>
 #include "arduino_lmic_hal_boards.h"
@@ -23,7 +26,6 @@
 #include <WiFi.h>
 #include <ESPmDNS.h>
 #include <WiFiUdp.h>
-#include <ArduinoOTA.h>
 
 #include "sds011.h"
 #include "sps30.h"
@@ -133,7 +135,7 @@ static const int interval_table[] = {
 };
 
 static fsm_state_t main_state;
-
+static WebServer webServer(80);
 static SSD1306 display(OLED_I2C_ADDR, PIN_OLED_SDA, PIN_OLED_SCL);
 static BME280 bme280;
 static bool bmeFound = false;
@@ -660,8 +662,11 @@ void setup(void)
     sprintf(ssid, "ESP32-%08X%08X", (uint32_t)(chipid >> 32), (uint32_t)chipid);
     printf("Starting AP with SSID '%s', pass '%s'\n", ssid, nvdata.wifipass); 
     WiFi.softAP(ssid, nvdata.wifipass);
-    ArduinoOTA.setHostname("esp32-pmsensor");
-    ArduinoOTA.begin();
+    webServer.on("/",[]() {
+       webServer.sendContent("<html><head><meta http-equiv=\"Refresh\" content=\"0; url='/update'\"/></head></html>");
+    });
+    ElegantOTA.begin(&webServer);
+    webServer.begin();
 }
 
 void loop(void)
@@ -723,6 +728,6 @@ void loop(void)
     }
 
     // run the OTA process
-    ArduinoOTA.handle();
+    webServer.handleClient();
 }
 
