@@ -139,7 +139,6 @@ static WebServer webServer(80);
 static SSD1306 display(OLED_I2C_ADDR, PIN_OLED_SDA, PIN_OLED_SCL);
 static BME280 bme280;
 static bool bmeFound = false;
-static char bmeVersion[8] = "FAIL!";
 static HardwareSerial serial(1);
 static SDS011 sds(&serial);
 static SPS30 sps(&serial);
@@ -649,6 +648,7 @@ void setup(void)
 
     // detect BME280
     printf("Detecting BME280 ...\n");
+    char bmeVersion[8];
     bmeFound = findBME280(bmeVersion);
     if (bmeFound) {
         printf("Found BME280, i2c=%s\n", bmeVersion);
@@ -659,7 +659,7 @@ void setup(void)
     // OTA init
     uint64_t chipid = ESP.getEfuseMac();
     char ssid[32];
-    sprintf(ssid, "ESP32-%08X%08X", (uint32_t)(chipid >> 32), (uint32_t)chipid);
+    sprintf(ssid, "ESP32-%04X%08X", (uint32_t)(chipid >> 32), (uint32_t)chipid);
     printf("Starting AP with SSID '%s', pass '%s'\n", ssid, nvdata.wifipass); 
     WiFi.softAP(ssid, nvdata.wifipass);
     webServer.on("/",[]() {
