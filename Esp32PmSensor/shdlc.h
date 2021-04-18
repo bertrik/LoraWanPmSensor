@@ -31,6 +31,7 @@ private:
     bool unescape(uint8_t *pc);
 
 public:
+    SHDLC();
 
     size_t build_tx(uint8_t *buf, uint8_t cmd, size_t data_len, const uint8_t *data);
     bool process_rx(uint8_t c, uint8_t cmd);

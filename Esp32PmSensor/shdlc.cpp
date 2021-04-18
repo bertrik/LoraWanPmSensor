@@ -5,6 +5,13 @@
 
 #include "shdlc.h"
 
+SHDLC::SHDLC(void)
+{
+    _state = SHDLC_START;
+    _index = 0;
+    _length = 0;
+    _miso_state = 0;
+}
 
 // true if *pc contains a valid value
 bool SHDLC::unescape(uint8_t *pc)
