@@ -14,7 +14,6 @@
 SDS011Protocol::SDS011Protocol(void)
 {
     _state = HEAD;
-    _size = sizeof(_buf);
     _idx = 0;
     _len = 0;
     _sum = 0;

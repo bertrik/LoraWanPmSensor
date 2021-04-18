@@ -18,7 +18,6 @@ class SDS011Protocol {
 private:
     EState  _state;
     uint8_t _buf[32];
-    int     _size;
     int     _idx;
     int     _len;
     uint8_t _sum;
