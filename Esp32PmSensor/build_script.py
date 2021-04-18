@@ -1,4 +1,4 @@
-Import("env", "projenv")
+Import("env")
 import shutil
 
 # copies the firmware.bin file to a file with a target-specific name
