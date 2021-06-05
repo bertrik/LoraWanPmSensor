@@ -3,6 +3,19 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+typedef struct {
+    float pm1_0;
+    float pm2_5;
+    float pm4_0;
+    float pm10;
+    float n0_5;
+    float n1_0;
+    float n2_5;
+    float n4_0;
+    float n10;
+    float tps;
+} sps_meas_t;
+
 class SPS30 {
 
 private:
@@ -26,7 +39,7 @@ public:
 
     bool start(void);
     bool stop(void);
-    bool read_measurement(uint16_t *pm1_0, uint16_t *pm2_5, uint16_t *pm4_0, uint16_t *pm10, uint16_t *ps);
+    bool read_measurement(sps_meas_t *meas);
     bool sleep(void);
     bool wakeup(void);
     bool clean_fan(void);

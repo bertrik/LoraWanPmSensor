@@ -55,7 +55,7 @@ int SPS30::exchange(uint8_t cmd, size_t out_len)
 bool SPS30::start()
 {
     _mosi[0] = 1;   // sub-command
-    _mosi[1] = 5;   // 5 = use integer (not float)
+    _mosi[1] = 3;   // format: 3 = IEEE754 float, 5 = big-endian integer
     return exchange(0x00, 2) == 0;
 }
 
@@ -64,17 +64,34 @@ bool SPS30::stop(void)
     return exchange(0x01, 0) == 0;
 }
 
-bool SPS30::read_measurement(uint16_t *pm1_0, uint16_t *pm2_5, uint16_t *pm4_0, uint16_t *pm10, uint16_t *ps)
+// performs machine-dependent conversion from big-endian IEEE754 bytes to float
+static float bytes_to_float(uint8_t *data)
+{
+    float f;
+    uint8_t *b = (uint8_t *)&f;
+    b[0] = data[3];
+    b[1] = data[2];
+    b[2] = data[1];
+    b[3] = data[0];
+    return f;
+}
+
+bool SPS30::read_measurement(sps_meas_t *meas)
 {
     int len = exchange(0x03, 0);
-    if (len < 20) {
+    if (len < 40) {
         return false;
     }
-    *pm1_0 = (_miso[0] << 8) + _miso[1];
-    *pm2_5 = (_miso[2] << 8) + _miso[3];
-    *pm4_0 = (_miso[4] << 8) + _miso[5];
-    *pm10 = (_miso[6] << 8) + _miso[7];
-    *ps = (_miso[18] << 8) + _miso[19];
+    meas->pm1_0 = bytes_to_float(_miso + 0);
+    meas->pm2_5 = bytes_to_float(_miso + 4);
+    meas->pm4_0 = bytes_to_float(_miso + 8);
+    meas->pm10 = bytes_to_float(_miso + 12);
+    meas->n0_5 = bytes_to_float(_miso + 16);
+    meas->n1_0 = bytes_to_float(_miso + 20);
+    meas->n2_5 = bytes_to_float(_miso + 24);
+    meas->n4_0 = bytes_to_float(_miso + 28);
+    meas->n10 = bytes_to_float(_miso + 32);
+    meas->tps = bytes_to_float(_miso + 36);
     return true;
 }
 

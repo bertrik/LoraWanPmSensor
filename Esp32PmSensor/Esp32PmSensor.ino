@@ -398,23 +398,23 @@ static bool pmsensor_on_off(boolean on)
 // return true if new measurement available
 static bool pmsensor_measure(void)
 {
-    sds_meas_t meas;
-    uint16_t pm1_0, pm2_5, pm4_0, pm10, ps;
+    sds_meas_t sds_meas;
+    sps_meas_t sps_meas;
 
     switch (pmsensor) {
     case E_PMSENSOR_SDS011:
-        if (sds.poll(&meas)) {
-            aggregator.add(E_ITEM_PM2_5, meas.pm2_5);
-            aggregator.add(E_ITEM_PM10, meas.pm10);
+        if (sds.poll(&sds_meas)) {
+            aggregator.add(E_ITEM_PM2_5, sds_meas.pm2_5);
+            aggregator.add(E_ITEM_PM10, sds_meas.pm10);
             return true;
         }
         break;
     case E_PMSENSOR_SPS30:
-        if (sps.read_measurement(&pm1_0, &pm2_5, &pm4_0, &pm10, &ps)) {
-            aggregator.add(E_ITEM_PM1_0, pm1_0);
-            aggregator.add(E_ITEM_PM2_5, pm2_5);
-            aggregator.add(E_ITEM_PM4_0, pm4_0);
-            aggregator.add(E_ITEM_PM10, pm10);
+        if (sps.read_measurement(&sps_meas)) {
+            aggregator.add(E_ITEM_PM1_0, sps_meas.pm1_0);
+            aggregator.add(E_ITEM_PM2_5, sps_meas.pm2_5);
+            aggregator.add(E_ITEM_PM4_0, sps_meas.pm4_0);
+            aggregator.add(E_ITEM_PM10, sps_meas.pm10);
             return true;
         }
         break;
