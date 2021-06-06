@@ -108,6 +108,12 @@ typedef enum {
     E_ITEM_PM2_5,
     E_ITEM_PM4_0,
     E_ITEM_PM10,
+    E_ITEM_N0_5,
+    E_ITEM_N1_0,
+    E_ITEM_N2_5,
+    E_ITEM_N4_0,
+    E_ITEM_N10,
+    E_ITEM_TPS,
     E_ITEM_TEMPERATURE,
     E_ITEM_HUMIDITY,
     E_ITEM_PRESSURE,
@@ -308,12 +314,43 @@ static void add_cayenne_8bit(uint8_t *buf, int &index, item_t item, int channel,
     }
 }
 
-static void send_dust(void)
+static void add_be_16bit(uint8_t *buf, int &index, item_t item, double unit)
 {
-    if ((LMIC.opmode & (OP_TXDATA | OP_TXRXPEND)) == 0) {
-        // encode it as Cayenne
-        uint8_t buf[32];
-        int idx = 0;
+    double value;
+    if (aggregator.get(item, value)) {
+        int intval = value / unit;
+        buf[index++] = (intval >> 8) & 0xFF;
+        buf[index++] = (intval >> 0) & 0xFF;
+    }
+}
+
+static bool send_dust(void)
+{
+    uint8_t buf[32];
+    int idx = 0;
+
+    if ((LMIC.opmode & (OP_TXDATA | OP_TXRXPEND)) != 0) {
+        return false;
+    }
+
+    if (pmsensor == E_PMSENSOR_SPS30) {
+        // encode as custom SPS30
+        add_be_16bit(buf, idx, E_ITEM_PM1_0, 0.1);
+        add_be_16bit(buf, idx, E_ITEM_PM2_5, 0.1);
+        add_be_16bit(buf, idx, E_ITEM_PM4_0, 0.1);
+        add_be_16bit(buf, idx, E_ITEM_PM10, 0.1);
+        add_be_16bit(buf, idx, E_ITEM_N0_5, 1.0);
+        add_be_16bit(buf, idx, E_ITEM_N1_0, 1.0);
+        add_be_16bit(buf, idx, E_ITEM_N2_5, 1.0);
+        add_be_16bit(buf, idx, E_ITEM_N4_0, 1.0);
+        add_be_16bit(buf, idx, E_ITEM_N10, 1.0);
+        add_be_16bit(buf, idx, E_ITEM_TPS, 0.001);
+
+        // Prepare upstream data transmission at the next possible time.
+        printhex("Sending SPS30: ", buf, idx);
+        LMIC_setTxData2(30, buf, idx, 0);
+    } else {
+        // encode as Cayenne
         add_cayenne_16bit(buf, idx, E_ITEM_PM1_0, 0, 2, 0.01);
         add_cayenne_16bit(buf, idx, E_ITEM_PM10, 1, 2, 0.01);
         add_cayenne_16bit(buf, idx, E_ITEM_PM2_5, 2, 2, 0.01);
@@ -324,9 +361,10 @@ static void send_dust(void)
         add_cayenne_16bit(buf, idx, E_ITEM_PRESSURE, 12, 115, 10.0);
 
         // Prepare upstream data transmission at the next possible time.
-        printhex("Sending: ", buf, idx);
+        printhex("Sending Cayenne: ", buf, idx);
         LMIC_setTxData2(1, buf, idx, 0);
     }
+    return true;
 }
 
 static void screen_update(unsigned long int second)
@@ -415,6 +453,12 @@ static bool pmsensor_measure(void)
             aggregator.add(E_ITEM_PM2_5, sps_meas.pm2_5);
             aggregator.add(E_ITEM_PM4_0, sps_meas.pm4_0);
             aggregator.add(E_ITEM_PM10, sps_meas.pm10);
+            aggregator.add(E_ITEM_N0_5, sps_meas.n0_5);
+            aggregator.add(E_ITEM_N1_0, sps_meas.n1_0);
+            aggregator.add(E_ITEM_N2_5, sps_meas.n2_5);
+            aggregator.add(E_ITEM_N4_0, sps_meas.n4_0);
+            aggregator.add(E_ITEM_N10, sps_meas.n10);
+            aggregator.add(E_ITEM_TPS, sps_meas.tps);
             return true;
         }
         break;
