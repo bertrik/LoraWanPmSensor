@@ -333,8 +333,10 @@ static bool send_dust(void)
         return false;
     }
 
+    int port;
     if (pmsensor == E_PMSENSOR_SPS30) {
         // encode as custom SPS30
+        port = 30;
         add_be_16bit(buf, idx, E_ITEM_PM1_0, 0.1);
         add_be_16bit(buf, idx, E_ITEM_PM2_5, 0.1);
         add_be_16bit(buf, idx, E_ITEM_PM4_0, 0.1);
@@ -345,25 +347,20 @@ static bool send_dust(void)
         add_be_16bit(buf, idx, E_ITEM_N4_0, 1.0);
         add_be_16bit(buf, idx, E_ITEM_N10, 1.0);
         add_be_16bit(buf, idx, E_ITEM_TPS, 0.001);
-
-        // Prepare upstream data transmission at the next possible time.
-        printhex("Sending SPS30: ", buf, idx);
-        LMIC_setTxData2(30, buf, idx, 0);
     } else {
         // encode as Cayenne
+        port = 1;
         add_cayenne_16bit(buf, idx, E_ITEM_PM1_0, 0, 2, 0.01);
         add_cayenne_16bit(buf, idx, E_ITEM_PM10, 1, 2, 0.01);
         add_cayenne_16bit(buf, idx, E_ITEM_PM2_5, 2, 2, 0.01);
         add_cayenne_16bit(buf, idx, E_ITEM_PM4_0, 4, 2, 0.01);
-
         add_cayenne_8bit(buf, idx, E_ITEM_HUMIDITY, 10, 104, 0.5);
         add_cayenne_16bit(buf, idx, E_ITEM_TEMPERATURE, 11, 103, 0.1);
         add_cayenne_16bit(buf, idx, E_ITEM_PRESSURE, 12, 115, 10.0);
-
-        // Prepare upstream data transmission at the next possible time.
-        printhex("Sending Cayenne: ", buf, idx);
-        LMIC_setTxData2(1, buf, idx, 0);
     }
+    printf("Sending on port %d, ", port);
+    printhex("data ", buf, idx);
+    LMIC_setTxData2(port, buf, idx, 0);
     return true;
 }
 
