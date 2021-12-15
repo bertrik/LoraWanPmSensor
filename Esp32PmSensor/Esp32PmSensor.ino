@@ -21,6 +21,7 @@
 #include <SparkFunBME280.h>
 #include "soc/efuse_reg.h"
 #include "HardwareSerial.h"
+#include "lwqrcode.h"
 
 // OTA
 #include <WiFi.h>
@@ -69,8 +70,8 @@ static const uint8_t APPKEY[] = {
 #define TIME_MEASURE    10
 // reboot interval (seconds)
 #define REBOOT_INTERVAL 2592000UL
-// time to keep display on (seconds)
-#define TIME_OLED_ENABLED   600
+// time to keep display on (ms)
+#define TIME_OLED_ENABLED   300000UL
 
 // how we know the non-volatile storage contains meaningful data
 #define NVDATA_MAGIC    "magic"
@@ -126,6 +127,12 @@ typedef enum {
     E_PMSENSOR_SPS30
 } pmsensor_t;
 
+typedef enum {
+    E_DISPLAYMODE_MEASUREMENTS,
+    E_DISPLAYMODE_QRCODE,
+    E_DISPLAYMODE_OFF
+} displaymode_t;
+
 // Pin mapping
 const lmic_pinmap lmic_pins = *Arduino_LMIC::GetPinmap_ThisBoard();
 
@@ -150,14 +157,16 @@ static HardwareSerial serial(1);
 static SDS011 sds(&serial);
 static SPS30 sps(&serial);
 static pmsensor_t pmsensor = E_PMSENSOR_NONE;
+static displaymode_t displaymode = E_DISPLAYMODE_MEASUREMENTS;
 
 static screen_t screen;
-static unsigned long screen_last_enabled = 0;
+static unsigned long button_last_pressed = 0;
 static nvdata_t nvdata;
 static char cmdline[100];
 static rps_t last_tx_rps = 0;
 
 static Aggregator aggregator(E_ITEM_MAX);
+static bool have_new_data = false;
 
 void os_getDevEui(u1_t * buf)
 {
@@ -367,46 +376,51 @@ static bool send_dust(void)
 
 static void screen_update(unsigned long int second)
 {
-    if (screen.update) {
-        display.clear();
-
-        // 1st line
-        display.setFont(ArialMT_Plain_10);
-        display.drawString(0, 0, screen.loraDevEui);
-
-        // 2nd line
-        display.setFont(ArialMT_Plain_16);
-        display.drawString(0, 12, screen.loraStatus);
-
-        // 3rd
-        display.drawString(0, 30, screen.dust1);
-
-        // 4th line
-        display.drawString(0, 46, screen.dust2);
-
-        display.display();
-        screen.update = false;
-    }
-    if (screen.enabled && ((second - screen_last_enabled) > TIME_OLED_ENABLED)) {
-        display.displayOff();
-        screen.enabled = false;
-    }
-}
-
-static void screen_format_dust(void)
-{
     char line[16];
     double value;
 
-    if (aggregator.get(E_ITEM_PM10, value)) {
-        snprintf(line, sizeof(line), "PM 10:%3d ", (int) round(value));
-        screen.dust1 = String(line) + UG_PER_M3;
+    // do nothing if nothing to do, or already done
+    if (!screen.update) {
+        return;
     }
-    if (aggregator.get(E_ITEM_PM2_5, value)) {
-        snprintf(line, sizeof(line), "PM2.5:%3d ", (int) round(value));
-        screen.dust2 = String(line) + UG_PER_M3;
+
+    switch (displaymode) {
+    case E_DISPLAYMODE_MEASUREMENTS:
+        display.displayOn();
+        display.clear();
+        display.setColor(WHITE);
+
+        display.setFont(ArialMT_Plain_10);
+        display.drawString(0, 0, screen.loraDevEui);
+        display.setFont(ArialMT_Plain_16);
+        display.drawString(0, 12, screen.loraStatus);
+
+        if (have_new_data && aggregator.get(E_ITEM_PM10, value)) {
+            snprintf(line, sizeof(line), "PM 10:%3d ", (int) round(value));
+            screen.dust1 = String(line) + UG_PER_M3;
+        }
+        display.drawString(0, 30, screen.dust1);
+
+        if (have_new_data && aggregator.get(E_ITEM_PM2_5, value)) {
+            snprintf(line, sizeof(line), "PM2.5:%3d ", (int) round(value));
+            screen.dust2 = String(line) + UG_PER_M3;
+        }
+        display.drawString(0, 46, screen.dust2);
+        display.display();
+
+        have_new_data = false;
+        break;
+    case E_DISPLAYMODE_QRCODE:
+        display.displayOn();
+        qrcode_show(&display, nvdata.appeui, nvdata.deveui, nvdata.appkey);
+        break;
+    case E_DISPLAYMODE_OFF:
+        display.displayOff();
+        break;
+    default:
+        break;
     }
-    screen.update = true;
+    screen.update = false;
 }
 
 static void set_fsm_state(fsm_state_t newstate)
@@ -514,12 +528,7 @@ static void fsm_run(unsigned long int seconds)
         break;
 
     case E_WARMUP:
-        if (sec < TIME_WARMUP) {
-            // read/show measurements while warming up
-            if (pmsensor_measure()) {
-                screen_format_dust();
-            }
-        } else {
+        if (sec > TIME_WARMUP) {
             // reset sum
             aggregator.reset();
             set_fsm_state(E_MEASURE);
@@ -529,7 +538,7 @@ static void fsm_run(unsigned long int seconds)
     case E_MEASURE:
         if (sec < (TIME_WARMUP + TIME_MEASURE)) {
             if (pmsensor_measure()) {
-                screen_format_dust();
+                have_new_data = true;
             }
         } else {
             // turn the fan off
@@ -758,13 +767,29 @@ void loop(void)
         }
     }
 
-    // button press re-enabled the display
-    if (digitalRead(PIN_BUTTON) == 0) {
-        if (!screen.enabled) {
-            display.displayOn();
-            screen_last_enabled = second;
-            screen.enabled = true;
+    // button press cycles through display states
+    if ((ms - button_last_pressed) > 500) {
+        if (digitalRead(PIN_BUTTON) == 0) {
+            button_last_pressed = ms;
+            // toggle display mode
+            switch (displaymode) {
+            case E_DISPLAYMODE_OFF:
+                displaymode = E_DISPLAYMODE_MEASUREMENTS;
+                have_new_data = true;
+                break;
+            case E_DISPLAYMODE_MEASUREMENTS:
+                displaymode = E_DISPLAYMODE_QRCODE;
+                break;
+            case E_DISPLAYMODE_QRCODE:
+                displaymode = E_DISPLAYMODE_OFF;
+                break;
+            }
+            screen.update = true;
         }
+    }
+    if ((ms - button_last_pressed) > TIME_OLED_ENABLED) {
+        displaymode = E_DISPLAYMODE_OFF;
+        screen.update = true;
     }
 
     // run the measurement state machine
