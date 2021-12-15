@@ -143,6 +143,7 @@ static const int interval_table[] = {
 static fsm_state_t main_state;
 static WebServer webServer(80);
 static SSD1306 display(OLED_I2C_ADDR, PIN_OLED_SDA, PIN_OLED_SCL);
+static bool has_external_display = false;
 static BME280 bme280;
 static bool bmeFound = false;
 static HardwareSerial serial(1);
@@ -582,6 +583,13 @@ static bool findBME280(char *version)
     return false;
 }
 
+static bool findDisplay(TwoWire *wire, int pinSda, int pinScl, uint8_t address)
+{
+    wire->begin(pinSda, pinScl);
+    wire->beginTransmission(address);
+    return (wire->endTransmission() == 0);
+}
+
 static void show_help(const cmd_t * cmds)
 {
     for (const cmd_t * cmd = cmds; cmd->cmd != NULL; cmd++) {
@@ -662,12 +670,18 @@ void setup(void)
     // button config
     pinMode(PIN_BUTTON, INPUT_PULLUP);
 
-    // init the OLED
+    // detect the display
     pinMode(PIN_OLED_RESET, OUTPUT);
     digitalWrite(PIN_OLED_RESET, LOW);
-    delay(50);
-    digitalWrite(PIN_OLED_RESET, HIGH);
+    has_external_display = findDisplay(&Wire, PIN_OLED_SDA, PIN_OLED_SCL, OLED_I2C_ADDR);
+    printf("Found external display: %s\n", has_external_display ? "yes" : "no");
+    if (!has_external_display) {
+        // no external display found, use the internal one
+        digitalWrite(PIN_OLED_RESET, HIGH);
+        delay(100);
+    }
 
+    // init the display
     display.init();
     display.flipScreenVertically();
     display.setFont(ArialMT_Plain_10);
