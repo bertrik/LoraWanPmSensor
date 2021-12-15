@@ -12,7 +12,7 @@ void qrcode_show(OLEDDisplay *display, const uint8_t *appeui, const uint8_t *dev
 {
     char qrtext[80];
     char *ptext = qrtext;
-    ptext += sprintf(qrtext, "LW:");
+    ptext += sprintf(qrtext, "OTAA:");
     for (int i = 0; i < 8; i++) {
         ptext += sprintf(ptext, "%02X", appeui[i]);
     }
