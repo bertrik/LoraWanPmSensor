@@ -393,7 +393,7 @@ static void screen_update(unsigned long int second)
         display.setFont(ArialMT_Plain_10);
         display.drawString(0, 0, screen.loraDevEui);
         display.setFont(ArialMT_Plain_16);
-        display.drawString(0, 12, screen.loraStatus);
+        display.drawString(0, 14, screen.loraStatus);
 
         if (have_new_data && aggregator.get(E_ITEM_PM10, value)) {
             snprintf(line, sizeof(line), "PM 10:%3d ", (int) round(value));
