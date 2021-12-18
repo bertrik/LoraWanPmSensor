@@ -128,6 +128,7 @@ typedef enum {
 } pmsensor_t;
 
 typedef enum {
+    E_DISPLAYMODE_HWINFO,
     E_DISPLAYMODE_MEASUREMENTS,
     E_DISPLAYMODE_QRCODE,
     E_DISPLAYMODE_OFF
@@ -157,7 +158,10 @@ static HardwareSerial serial(1);
 static SDS011 sds(&serial);
 static SPS30 sps(&serial);
 static pmsensor_t pmsensor = E_PMSENSOR_NONE;
-static displaymode_t displaymode = E_DISPLAYMODE_MEASUREMENTS;
+static displaymode_t displaymode = E_DISPLAYMODE_HWINFO;
+static char board_name[32];
+static char pmsensor_name[32];
+static char rhsensor_name[32];
 
 static screen_t screen;
 static unsigned long button_last_pressed = 0;
@@ -385,6 +389,18 @@ static void screen_update(unsigned long int second)
     }
 
     switch (displaymode) {
+    case E_DISPLAYMODE_HWINFO:
+        display.displayOn();
+        display.clear();
+        display.setColor(WHITE);
+        display.setFont(ArialMT_Plain_10);
+        display.drawString(0, 0, screen.loraDevEui);
+        display.setFont(ArialMT_Plain_16);
+        display.drawString(0, 14, board_name);
+        display.drawString(0, 30, pmsensor_name);
+        display.drawString(0, 46, rhsensor_name);
+        display.display();
+        break;
     case E_DISPLAYMODE_MEASUREMENTS:
         display.displayOn();
         display.clear();
@@ -495,8 +511,7 @@ static void fsm_run(unsigned long int seconds)
             if (sps.wakeup()) {
                 printf("Found SPS30\n");
                 pmsensor = E_PMSENSOR_SPS30;
-                screen.dust1 = String("PM: SPS30");
-                screen.update = true;
+                snprintf(pmsensor_name, sizeof(pmsensor_name), "SPS30");
                 break;
             }
             // detect SDS011
@@ -509,8 +524,7 @@ static void fsm_run(unsigned long int seconds)
                     printf("SDS011: %s, %s\n", serial, date);
                 }
                 pmsensor = E_PMSENSOR_SDS011;
-                screen.dust1 = String("PM: SDS011");
-                screen.update = true;
+                snprintf(pmsensor_name, sizeof(pmsensor_name), "SDS011: %s", serial);
                 break;
             }
         } else {
@@ -713,18 +727,21 @@ void setup(void)
 
     // detect BME280
     printf("Detecting BME280 ...\n");
+    snprintf(board_name, sizeof(board_name), "ESP32-%s", BOARD_NAME);
+    strcpy(pmsensor_name, "");
+    strcpy(rhsensor_name, "");
     char bmeVersion[8];
     bmeFound = findBME280(bmeVersion);
     if (bmeFound) {
         printf("Found BME280, i2c=%s\n", bmeVersion);
-        screen.dust2 = String("BME280:") + bmeVersion;
+        snprintf(rhsensor_name, sizeof(rhsensor_name), "BME280: %s", bmeVersion);
         screen.update = true;
     }
 
     // OTA init
     uint64_t chipid = ESP.getEfuseMac();
     char ssid[32];
-    sprintf(ssid, "ESP32-%04X%08X", (uint32_t)(chipid >> 32), (uint32_t)chipid);
+    sprintf(ssid, "%s-%04X%08X", board_name, (uint32_t)(chipid >> 32), (uint32_t)chipid);
     printf("Starting AP with SSID '%s', pass '%s'\n", ssid, nvdata.wifipass); 
     WiFi.softAP(ssid, nvdata.wifipass);
     webServer.on("/",[]() {
@@ -773,15 +790,18 @@ void loop(void)
             button_last_pressed = ms;
             // toggle display mode
             switch (displaymode) {
-            case E_DISPLAYMODE_OFF:
-                displaymode = E_DISPLAYMODE_MEASUREMENTS;
+            case E_DISPLAYMODE_HWINFO:
                 have_new_data = true;
+                displaymode = E_DISPLAYMODE_MEASUREMENTS;
                 break;
             case E_DISPLAYMODE_MEASUREMENTS:
                 displaymode = E_DISPLAYMODE_QRCODE;
                 break;
             case E_DISPLAYMODE_QRCODE:
                 displaymode = E_DISPLAYMODE_OFF;
+                break;
+            case E_DISPLAYMODE_OFF:
+                displaymode = E_DISPLAYMODE_HWINFO;
                 break;
             }
             screen.update = true;
