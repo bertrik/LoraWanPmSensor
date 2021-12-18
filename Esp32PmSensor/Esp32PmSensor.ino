@@ -90,8 +90,6 @@ typedef struct {
     bool update;
     char loraDevEui[32];
     char loraStatus[32];
-    String dust1;
-    String dust2;
 } screen_t;
 
 // main state machine
@@ -405,25 +403,19 @@ static void screen_update(unsigned long int second)
         display.displayOn();
         display.clear();
         display.setColor(WHITE);
-
         display.setFont(ArialMT_Plain_10);
         display.drawString(0, 0, screen.loraDevEui);
         display.setFont(ArialMT_Plain_16);
         display.drawString(0, 14, screen.loraStatus);
-
         if (have_new_data && aggregator.get(E_ITEM_PM10, value)) {
             snprintf(line, sizeof(line), "PM 10:%3d ", (int) round(value));
-            screen.dust1 = String(line) + UG_PER_M3;
+            display.drawString(0, 30, String(line) + UG_PER_M3);
         }
-        display.drawString(0, 30, screen.dust1);
-
         if (have_new_data && aggregator.get(E_ITEM_PM2_5, value)) {
             snprintf(line, sizeof(line), "PM2.5:%3d ", (int) round(value));
-            screen.dust2 = String(line) + UG_PER_M3;
+            display.drawString(0, 46, String(line) + UG_PER_M3);
         }
-        display.drawString(0, 46, screen.dust2);
         display.display();
-
         have_new_data = false;
         break;
     case E_DISPLAYMODE_QRCODE:
