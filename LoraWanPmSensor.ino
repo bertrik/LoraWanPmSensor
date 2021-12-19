@@ -397,6 +397,12 @@ static void screen_update(unsigned long int second)
     screen.update = false;
 }
 
+static void set_display_mode(displaymode_t new_mode)
+{
+    screen.displaymode = new_mode;
+    screen.update = true;
+}
+
 static void set_fsm_state(fsm_state_t newstate)
 {
     if (newstate < E_LAST) {
@@ -486,8 +492,7 @@ static void fsm_run(unsigned long int seconds)
                 break;
             }
         } else {
-            screen.displaymode = E_DISPLAYMODE_HWINFO;
-            screen.update = true;
+            set_display_mode(E_DISPLAYMODE_HWINFO);
             set_fsm_state(E_IDLE);
         }
         break;
@@ -505,9 +510,8 @@ static void fsm_run(unsigned long int seconds)
         if (sec > TIME_WARMUP) {
             // reset sum
             aggregator.reset();
+            set_display_mode(has_joined_otaa ? E_DISPLAYMODE_MEASUREMENTS : E_DISPLAYMODE_QRCODE);
             set_fsm_state(E_MEASURE);
-            screen.displaymode = has_joined_otaa ? E_DISPLAYMODE_MEASUREMENTS : E_DISPLAYMODE_QRCODE;
-            screen.update = true;
         }
         break;
 
@@ -753,24 +757,22 @@ void loop(void)
             // cycle display mode
             switch (screen.displaymode) {
             case E_DISPLAYMODE_HWINFO:
-                screen.displaymode = E_DISPLAYMODE_MEASUREMENTS;
+                set_display_mode(E_DISPLAYMODE_MEASUREMENTS);
                 break;
             case E_DISPLAYMODE_MEASUREMENTS:
-                screen.displaymode = E_DISPLAYMODE_QRCODE;
+                set_display_mode(E_DISPLAYMODE_QRCODE);
                 break;
             case E_DISPLAYMODE_QRCODE:
-                screen.displaymode = E_DISPLAYMODE_OFF;
+                set_display_mode(E_DISPLAYMODE_OFF);
                 break;
             case E_DISPLAYMODE_OFF:
-                screen.displaymode = E_DISPLAYMODE_HWINFO;
+                set_display_mode(E_DISPLAYMODE_HWINFO);
                 break;
             }
-            screen.update = true;
         }
     }
     if ((ms - button_last_pressed) > TIME_OLED_ENABLED) {
-        screen.displaymode = E_DISPLAYMODE_OFF;
-        screen.update = true;
+        set_display_mode(E_DISPLAYMODE_OFF);
     }
 
     // run the measurement state machine
