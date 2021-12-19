@@ -36,6 +36,7 @@
 #include "editline.h"
 #include "cmdproc.h"
 #include "aggregator.h"
+#include "item.h"
 
 // This EUI must be in BIG-ENDIAN format, most-significant byte (MSB).
 // For TTN issued EUIs the first bytes should be 0x70, 0xB3, 0xD5.
@@ -101,23 +102,6 @@ typedef enum {
     E_SEND,
     E_LAST
 } fsm_state_t;
-
-typedef enum {
-    E_ITEM_PM1_0,
-    E_ITEM_PM2_5,
-    E_ITEM_PM4_0,
-    E_ITEM_PM10,
-    E_ITEM_N0_5,
-    E_ITEM_N1_0,
-    E_ITEM_N2_5,
-    E_ITEM_N4_0,
-    E_ITEM_N10,
-    E_ITEM_TPS,
-    E_ITEM_TEMPERATURE,
-    E_ITEM_HUMIDITY,
-    E_ITEM_PRESSURE,
-    E_ITEM_MAX
-} item_t;
 
 typedef enum {
     E_PMSENSOR_NONE,
