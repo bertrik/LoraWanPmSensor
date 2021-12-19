@@ -31,6 +31,7 @@
 #include "sds011.h"
 #include "sps30.h"
 
+#include "printf.h"
 #include "editline.h"
 #include "cmdproc.h"
 #include "aggregator.h"
@@ -45,8 +46,6 @@ static const uint8_t APPKEY[] = {
 };
 
 #define DEFAULT_WIFI_PASSWORD   "pmsensor"
-
-#define printf Serial.printf
 
 #define OLED_I2C_ADDR 0x3C
 
