@@ -32,6 +32,7 @@
 #include "sps30.h"
 
 #include "printf.h"
+#include "hexutil.h"
 #include "editline.h"
 #include "cmdproc.h"
 #include "aggregator.h"
@@ -277,26 +278,6 @@ static void onEventCallback(void *user, ev_t ev)
         break;
     }
 }
-
-static void printhex(const char *prefix, const uint8_t * buf, int len)
-{
-    printf(prefix);
-    for (int i = 0; i < len; i++) {
-        printf("%02X", buf[i]);
-    }
-    printf("\n");
-}
-
-static void parsehex(const char *hex, uint8_t *buf, int len)
-{
-    char tmp[3];
-    for (int i = 0; i < len; i++) {
-        strlcpy(tmp, hex, 3);
-        *buf++ = strtoul(tmp, NULL, 16);
-        hex += 2;
-    }
-}
-
 static void add_cayenne_16bit(uint8_t *buf, int &index, item_t item, int channel, int type, double unit)
 {
     double value;
@@ -370,7 +351,7 @@ static bool send_dust(void)
         add_cayenne_16bit(buf, idx, E_ITEM_PRESSURE, 12, 115, 10.0);
     }
     printf("Sending on port %d, ", port);
-    printhex("data ", buf, idx);
+    hexprint("data ", buf, idx);
     LMIC_setTxData2(port, buf, idx, 0);
     return true;
 }
@@ -639,16 +620,16 @@ static int do_otaa(int argc, char *argv[])
             return CMD_ARG;
         }
 
-        parsehex(deveui_hex, nvdata.deveui, 8);
-        parsehex(appeui_hex, nvdata.appeui, 8);
-        parsehex(appkey_hex, nvdata.appkey, 16);
+        hexparse(deveui_hex, nvdata.deveui, 8);
+        hexparse(appeui_hex, nvdata.appeui, 8);
+        hexparse(appkey_hex, nvdata.appkey, 16);
         nvdata_save();
     }
 
     // show current OTAA parameters
-    printhex("Dev EUI: ", nvdata.deveui, 8);
-    printhex("App EUI: ", nvdata.appeui, 8);
-    printhex("App key: ", nvdata.appkey, 16);
+    hexprint("Dev EUI: ", nvdata.deveui, 8);
+    hexprint("App EUI: ", nvdata.appeui, 8);
+    hexprint("App key: ", nvdata.appkey, 16);
 
     return CMD_OK;
 }
