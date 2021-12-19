@@ -86,11 +86,22 @@ typedef struct {
     char magic[8];
 } nvdata_t;
 
+typedef enum {
+    E_DISPLAYMODE_HWINFO,
+    E_DISPLAYMODE_MEASUREMENTS,
+    E_DISPLAYMODE_QRCODE,
+    E_DISPLAYMODE_OFF
+} displaymode_t;
+
+// data structures related to information shown on screen
 typedef struct {
     bool enabled;
     bool update;
     char loraDevEui[32];
     char loraStatus[32];
+    displaymode_t displaymode = E_DISPLAYMODE_HWINFO;
+    char pmsensor_name[32];
+    char rhsensor_name[32];
 } screen_t;
 
 // main state machine
@@ -109,13 +120,6 @@ typedef enum {
     E_PMSENSOR_SPS30
 } pmsensor_t;
 
-typedef enum {
-    E_DISPLAYMODE_HWINFO,
-    E_DISPLAYMODE_MEASUREMENTS,
-    E_DISPLAYMODE_QRCODE,
-    E_DISPLAYMODE_OFF
-} displaymode_t;
-
 // Pin mapping
 const lmic_pinmap lmic_pins = *Arduino_LMIC::GetPinmap_ThisBoard();
 
@@ -130,6 +134,7 @@ static const int interval_table[] = {
     16  // SF12
 };
 
+static char board_name[32];
 static fsm_state_t main_state;
 static WebServer webServer(80);
 static SSD1306 display(OLED_I2C_ADDR, PIN_OLED_SDA, PIN_OLED_SCL);
@@ -140,16 +145,12 @@ static HardwareSerial serial(1);
 static SDS011 sds(&serial);
 static SPS30 sps(&serial);
 static pmsensor_t pmsensor = E_PMSENSOR_NONE;
-static displaymode_t displaymode = E_DISPLAYMODE_HWINFO;
-static char board_name[32];
-static char pmsensor_name[32];
-static char rhsensor_name[32];
-
 static screen_t screen;
 static unsigned long button_last_pressed = 0;
 static nvdata_t nvdata;
 static char cmdline[100];
 static rps_t last_tx_rps = 0;
+static bool has_joined_otaa = false;
 
 static Aggregator aggregator(E_ITEM_MAX);
 static bool have_new_data = false;
@@ -229,12 +230,15 @@ static void onEventCallback(void *user, ev_t ev)
     switch (ev) {
     case EV_JOINING:
         setLoraStatus("OTAA JOIN...");
+        has_joined_otaa = false;
         break;
     case EV_JOINED:
         setLoraStatus("JOIN OK!");
+        has_joined_otaa = true;
         break;
     case EV_JOIN_FAILED:
         setLoraStatus("JOIN failed!");
+        has_joined_otaa = false;
         break;
     case EV_TXCOMPLETE:
         if (LMIC.txrxFlags & TXRX_ACK)
@@ -350,7 +354,7 @@ static void screen_update(unsigned long int second)
         return;
     }
 
-    switch (displaymode) {
+    switch (screen.displaymode) {
     case E_DISPLAYMODE_HWINFO:
         display.displayOn();
         display.clear();
@@ -359,8 +363,8 @@ static void screen_update(unsigned long int second)
         display.drawString(0, 0, screen.loraDevEui);
         display.setFont(ArialMT_Plain_16);
         display.drawString(0, 14, board_name);
-        display.drawString(0, 30, pmsensor_name);
-        display.drawString(0, 46, rhsensor_name);
+        display.drawString(0, 30, screen.pmsensor_name);
+        display.drawString(0, 46, screen.rhsensor_name);
         display.display();
         break;
     case E_DISPLAYMODE_MEASUREMENTS:
@@ -467,7 +471,7 @@ static void fsm_run(unsigned long int seconds)
             if (sps.wakeup()) {
                 printf("Found SPS30\n");
                 pmsensor = E_PMSENSOR_SPS30;
-                snprintf(pmsensor_name, sizeof(pmsensor_name), "SPS30");
+                snprintf(screen.pmsensor_name, sizeof(screen.pmsensor_name), "SPS30");
                 break;
             }
             // detect SDS011
@@ -480,10 +484,12 @@ static void fsm_run(unsigned long int seconds)
                     printf("SDS011: %s, %s\n", serial, date);
                 }
                 pmsensor = E_PMSENSOR_SDS011;
-                snprintf(pmsensor_name, sizeof(pmsensor_name), "SDS011: %s", serial);
+                snprintf(screen.pmsensor_name, sizeof(screen.pmsensor_name), "SDS011: %s", serial);
                 break;
             }
         } else {
+            screen.displaymode = E_DISPLAYMODE_HWINFO;
+            screen.update = true;
             set_fsm_state(E_IDLE);
         }
         break;
@@ -502,6 +508,8 @@ static void fsm_run(unsigned long int seconds)
             // reset sum
             aggregator.reset();
             set_fsm_state(E_MEASURE);
+            screen.displaymode = has_joined_otaa ? E_DISPLAYMODE_MEASUREMENTS : E_DISPLAYMODE_QRCODE;
+            screen.update = true;
         }
         break;
 
@@ -509,6 +517,7 @@ static void fsm_run(unsigned long int seconds)
         if (sec < (TIME_WARMUP + TIME_MEASURE)) {
             if (pmsensor_measure()) {
                 have_new_data = true;
+                screen.update = true;
             }
         } else {
             // turn the fan off
@@ -681,16 +690,16 @@ void setup(void)
     LMIC_registerEventCb(onEventCallback, NULL);
     LMIC_startJoining();
 
-    // detect BME280
-    printf("Detecting BME280 ...\n");
+    // detect hardware
     snprintf(board_name, sizeof(board_name), "ESP32-%s", BOARD_NAME);
-    strcpy(pmsensor_name, "");
-    strcpy(rhsensor_name, "");
+    printf("Detecting BME280 ...\n");
+    strcpy(screen.pmsensor_name, "");
+    strcpy(screen.rhsensor_name, "");
     char bmeVersion[8];
     bmeFound = findBME280(bmeVersion);
     if (bmeFound) {
         printf("Found BME280, i2c=%s\n", bmeVersion);
-        snprintf(rhsensor_name, sizeof(rhsensor_name), "BME280: %s", bmeVersion);
+        snprintf(screen.rhsensor_name, sizeof(screen.rhsensor_name), "BME280: %s", bmeVersion);
         screen.update = true;
     }
 
@@ -744,27 +753,27 @@ void loop(void)
     if ((ms - button_last_pressed) > 500) {
         if (digitalRead(PIN_BUTTON) == 0) {
             button_last_pressed = ms;
-            // toggle display mode
-            switch (displaymode) {
+            // cycle display mode
+            switch (screen.displaymode) {
             case E_DISPLAYMODE_HWINFO:
                 have_new_data = true;
-                displaymode = E_DISPLAYMODE_MEASUREMENTS;
+                screen.displaymode = E_DISPLAYMODE_MEASUREMENTS;
                 break;
             case E_DISPLAYMODE_MEASUREMENTS:
-                displaymode = E_DISPLAYMODE_QRCODE;
+                screen.displaymode = E_DISPLAYMODE_QRCODE;
                 break;
             case E_DISPLAYMODE_QRCODE:
-                displaymode = E_DISPLAYMODE_OFF;
+                screen.displaymode = E_DISPLAYMODE_OFF;
                 break;
             case E_DISPLAYMODE_OFF:
-                displaymode = E_DISPLAYMODE_HWINFO;
+                screen.displaymode = E_DISPLAYMODE_HWINFO;
                 break;
             }
             screen.update = true;
         }
     }
     if ((ms - button_last_pressed) > TIME_OLED_ENABLED) {
-        displaymode = E_DISPLAYMODE_OFF;
+        screen.displaymode = E_DISPLAYMODE_OFF;
         screen.update = true;
     }
 
