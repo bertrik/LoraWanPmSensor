@@ -153,7 +153,6 @@ static rps_t last_tx_rps = 0;
 static bool has_joined_otaa = false;
 
 static Aggregator aggregator(E_ITEM_MAX);
-static bool have_new_data = false;
 
 void os_getDevEui(u1_t * buf)
 {
@@ -375,16 +374,15 @@ static void screen_update(unsigned long int second)
         display.drawString(0, 0, screen.loraDevEui);
         display.setFont(ArialMT_Plain_16);
         display.drawString(0, 14, screen.loraStatus);
-        if (have_new_data && aggregator.get(E_ITEM_PM10, value)) {
+        if (aggregator.get(E_ITEM_PM10, value)) {
             snprintf(line, sizeof(line), "PM 10:%3d ", (int) round(value));
             display.drawString(0, 30, String(line) + UG_PER_M3);
         }
-        if (have_new_data && aggregator.get(E_ITEM_PM2_5, value)) {
+        if (aggregator.get(E_ITEM_PM2_5, value)) {
             snprintf(line, sizeof(line), "PM2.5:%3d ", (int) round(value));
             display.drawString(0, 46, String(line) + UG_PER_M3);
         }
         display.display();
-        have_new_data = false;
         break;
     case E_DISPLAYMODE_QRCODE:
         display.displayOn();
@@ -516,7 +514,6 @@ static void fsm_run(unsigned long int seconds)
     case E_MEASURE:
         if (sec < (TIME_WARMUP + TIME_MEASURE)) {
             if (pmsensor_measure()) {
-                have_new_data = true;
                 screen.update = true;
             }
         } else {
@@ -756,7 +753,6 @@ void loop(void)
             // cycle display mode
             switch (screen.displaymode) {
             case E_DISPLAYMODE_HWINFO:
-                have_new_data = true;
                 screen.displaymode = E_DISPLAYMODE_MEASUREMENTS;
                 break;
             case E_DISPLAYMODE_MEASUREMENTS:
