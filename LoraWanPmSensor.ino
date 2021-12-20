@@ -675,6 +675,10 @@ void setup(void)
     display.flipScreenVertically();
     display.setFont(ArialMT_Plain_10);
     display.setTextAlignment(TEXT_ALIGN_LEFT);
+    if (!has_external_display) {
+        // reduce brightness of internal display to mitigate burn-in
+        display.setBrightness(127);
+    }
     screen.enabled = true;
 
     // restore setting (LoRaWAN keys, etc) from EEPROM, or use a default
@@ -701,7 +705,6 @@ void setup(void)
     if (bmeFound) {
         printf("Found BME280, i2c=%s\n", bmeVersion);
         snprintf(screen.rhsensor_name, sizeof(screen.rhsensor_name), "BME280: %s", bmeVersion);
-        screen.update = true;
     }
 
     // OTA init
