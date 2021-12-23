@@ -25,8 +25,7 @@
 
 // OTA
 #include <WiFi.h>
-#include <ESPmDNS.h>
-#include <WiFiUdp.h>
+#include <DNSServer.h>
 
 #include "sds011.h"
 #include "sps30.h"
@@ -134,6 +133,7 @@ static const int interval_table[] = {
     16  // SF12
 };
 
+static DNSServer dnsServer;
 static char board_name[32];
 static fsm_state_t main_state;
 static WebServer webServer(80);
@@ -718,6 +718,7 @@ void setup(void)
     });
     ElegantOTA.begin(&webServer);
     webServer.begin();
+    dnsServer.start(53, "*", WiFi.softAPIP());
 }
 
 void loop(void)
@@ -796,5 +797,6 @@ void loop(void)
 
     // run the OTA process
     webServer.handleClient();
+    dnsServer.processNextRequest();
 }
 
