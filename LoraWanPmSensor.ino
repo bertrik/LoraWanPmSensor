@@ -727,7 +727,7 @@ void loop(void)
     unsigned long second = ms / 1000UL;
 
     // parse command line
-    if (Serial.available()) {
+    while (Serial.available()) {
         char c;
         bool haveLine = EditLine(Serial.read(), &c);
         Serial.write(c);
