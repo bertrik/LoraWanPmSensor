@@ -265,16 +265,26 @@ static void onEventCallback(void *user, ev_t ev)
         break;
     }
 }
-static void add_cayenne_16bit(uint8_t *buf, int &index, item_t item, int channel, int type, double unit)
+
+static void add_cayenne_u16(uint8_t *buf, int &index, item_t item, int channel, int type, double unit)
 {
     double value;
     if (aggregator.get(item, value)) {
         int intval = value / unit;
-        if (intval < 0) {
-            intval = 0;
-        } else if (intval > 32767) {
-            intval = 32767;
-        }
+        intval = constrain(intval, 0, 32767);
+        buf[index++] = channel;
+        buf[index++] = type;
+        buf[index++] = highByte(intval);
+        buf[index++] = lowByte(intval);
+    }
+}
+
+static void add_cayenne_s16(uint8_t *buf, int &index, item_t item, int channel, int type, double unit)
+{
+    double value;
+    if (aggregator.get(item, value)) {
+        int intval = value / unit;
+        intval = constrain(intval, -32768, 32767);
         buf[index++] = channel;
         buf[index++] = type;
         buf[index++] = highByte(intval);
@@ -329,13 +339,13 @@ static bool send_dust(void)
     } else {
         // encode as Cayenne
         port = 1;
-        add_cayenne_16bit(buf, idx, E_ITEM_PM1_0, 0, 2, 0.01);
-        add_cayenne_16bit(buf, idx, E_ITEM_PM10, 1, 2, 0.01);
-        add_cayenne_16bit(buf, idx, E_ITEM_PM2_5, 2, 2, 0.01);
-        add_cayenne_16bit(buf, idx, E_ITEM_PM4_0, 4, 2, 0.01);
+        add_cayenne_u16(buf, idx, E_ITEM_PM1_0, 0, 2, 0.01);
+        add_cayenne_u16(buf, idx, E_ITEM_PM10, 1, 2, 0.01);
+        add_cayenne_u16(buf, idx, E_ITEM_PM2_5, 2, 2, 0.01);
+        add_cayenne_u16(buf, idx, E_ITEM_PM4_0, 4, 2, 0.01);
         add_cayenne_8bit(buf, idx, E_ITEM_HUMIDITY, 10, 104, 0.5);
-        add_cayenne_16bit(buf, idx, E_ITEM_TEMPERATURE, 11, 103, 0.1);
-        add_cayenne_16bit(buf, idx, E_ITEM_PRESSURE, 12, 115, 10.0);
+        add_cayenne_s16(buf, idx, E_ITEM_TEMPERATURE, 11, 103, 0.1);
+        add_cayenne_u16(buf, idx, E_ITEM_PRESSURE, 12, 115, 10.0);
     }
     printf("Sending on port %d, ", port);
     hexprint("data ", buf, idx);
